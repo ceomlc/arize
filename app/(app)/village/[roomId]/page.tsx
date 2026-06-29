@@ -81,7 +81,7 @@ export default function RoomPage() {
 
   async function loadMessages() {
     const { data } = await supabase
-      .from('village_messages').select('*, profiles(name)')
+      .from('village_messages').select('*, profiles(name, username)')
       .eq('room_id', roomId).order('created_at', { ascending: true }).limit(100)
     setMessages((data ?? []) as VillageMessage[])
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
@@ -98,7 +98,7 @@ export default function RoomPage() {
     supabase.channel(`room:${roomId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'village_messages', filter: `room_id=eq.${roomId}` },
         async (payload) => {
-          const { data: newMsg } = await supabase.from('village_messages').select('*, profiles(name)').eq('id', payload.new.id).single()
+          const { data: newMsg } = await supabase.from('village_messages').select('*, profiles(name, username)').eq('id', payload.new.id).single()
           if (newMsg) {
             setMessages(prev => [...prev, newMsg as VillageMessage])
             setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
@@ -283,7 +283,8 @@ export default function RoomPage() {
             )}
             {messages.map(msg => {
               const isOwn = msg.user_id === currentUser?.id
-              const name = (msg.profiles as { name: string | null } | null)?.name ?? 'Member'
+              const profile = msg.profiles as { name: string | null; username: string | null } | null
+              const name = profile?.username ? `@${profile.username}` : (profile?.name ?? 'Member')
               const isMsgModerator = moderatorIds.has(msg.user_id)
               return (
                 <div key={msg.id} style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', flexDirection: isOwn ? 'row-reverse' : 'row' }}>
