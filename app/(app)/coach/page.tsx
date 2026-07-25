@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Send } from 'lucide-react'
+import { Send, History, Plus, X, MessageCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import type { CoachMessage } from '@/lib/types'
+import type { CoachConversation, CoachMessage, SavedCoachMessage } from '@/lib/types'
 
 const INITIAL_MESSAGE: CoachMessage = {
   role: 'assistant',
@@ -23,11 +23,19 @@ export default function CoachPage() {
   const supabase = createClient()
 
   const [messages, setMessages] = useState<CoachMessage[]>([INITIAL_MESSAGE])
-  const [input, setInput] = useState('')
+  const [input, setInput] = useState(() =>
+    searchParams.get('prompt') === 'help-goals'
+      ? 'I want to set meaningful goals for this week. Can you help me think through what matters most right now?'
+      : '',
+  )
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState('')
-  const [userName, setUserName] = useState('')
   const [recentMood, setRecentMood] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
+  const [conversationId, setConversationId] = useState<string | null>(null)
+  const [conversations, setConversations] = useState<CoachConversation[]>([])
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -35,11 +43,19 @@ export default function CoachPage() {
     async function loadContext() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
+      setUserId(user.id)
+
+      const { data: conversationData } = await supabase
+        .from('coach_conversations')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false })
+        .limit(30)
+      setConversations((conversationData ?? []) as CoachConversation[])
+      setHistoryLoading(false)
 
       const { data: profileRaw } = await supabase.from('profiles').select('name').eq('id', user.id).single()
       const profile = profileRaw as { name: string | null } | null
-      if (profile?.name) setUserName(profile.name.split(' ')[0])
-
       const { data: checkInRaw } = await supabase
         .from('check_ins')
         .select('mood, emotion_tags')
@@ -67,9 +83,7 @@ export default function CoachPage() {
     loadContext()
 
     // Handle ?prompt=help-goals from Sunday Goal Session
-    const prompt = searchParams.get('prompt')
-    if (prompt === 'help-goals') {
-      setInput("I want to set meaningful goals for this week. Can you help me think through what matters most right now?")
+    if (searchParams.get('prompt') === 'help-goals') {
       setTimeout(() => textareaRef.current?.focus(), 300)
     }
   }, [])
@@ -95,11 +109,43 @@ export default function CoachPage() {
     setMessages(prev => [...prev, assistantMsg])
 
     try {
+      let activeUserId = userId
+      if (!activeUserId) {
+        const { data: { user } } = await supabase.auth.getUser()
+        activeUserId = user?.id ?? null
+        if (activeUserId) setUserId(activeUserId)
+      }
+      if (!activeUserId) throw new Error('Unauthorized')
+
+      let activeConversationId = conversationId
+      if (!activeConversationId) {
+        const title = messageContent.replace(/\s+/g, ' ').trim().slice(0, 72)
+        const { data: created, error: createError } = await supabase
+          .from('coach_conversations')
+          .insert({ user_id: activeUserId, title })
+          .select('*')
+          .single()
+        if (createError || !created) throw createError ?? new Error('Unable to create conversation')
+        activeConversationId = created.id
+        setConversationId(created.id)
+        setConversations(prev => [created as CoachConversation, ...prev])
+      }
+
+      const { error: userMessageError } = await supabase
+        .from('coach_messages')
+        .insert({
+          conversation_id: activeConversationId,
+          user_id: activeUserId,
+          role: 'user',
+          content: messageContent,
+        })
+      if (userMessageError) throw userMessageError
+
       const response = await fetch('/api/coach', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: updatedMessages.map(m => ({ role: m.role, content: m.content })),
+          messages: updatedMessages.slice(-16).map(m => ({ role: m.role, content: m.content })),
         }),
       })
 
@@ -112,10 +158,12 @@ export default function CoachPage() {
 
       if (!reader) throw new Error('No response body')
 
+      let assistantContent = ''
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
         const chunk = decoder.decode(value, { stream: true })
+        assistantContent += chunk
         setMessages(prev => {
           const updated = [...prev]
           updated[updated.length - 1] = {
@@ -125,12 +173,69 @@ export default function CoachPage() {
           return updated
         })
       }
+
+      if (assistantContent.trim()) {
+        const { error: assistantMessageError } = await supabase
+          .from('coach_messages')
+          .insert({
+            conversation_id: activeConversationId,
+            user_id: activeUserId,
+            role: 'assistant',
+            content: assistantContent,
+          })
+        if (assistantMessageError) {
+          setError('Your response is visible, but it could not be added to conversation history.')
+        } else {
+          const updatedAt = new Date().toISOString()
+          await supabase
+            .from('coach_conversations')
+            .update({ updated_at: updatedAt })
+            .eq('id', activeConversationId)
+            .eq('user_id', activeUserId)
+          setConversations(prev => prev
+            .map(conversation => conversation.id === activeConversationId
+              ? { ...conversation, updated_at: updatedAt }
+              : conversation)
+            .sort((a, b) => b.updated_at.localeCompare(a.updated_at)))
+        }
+      }
     } catch {
       setError('Clarity is unavailable right now. Please check your connection and try again.')
       setMessages(prev => prev.slice(0, -1)) // Remove empty assistant message
     } finally {
       setStreaming(false)
     }
+  }
+
+  async function openConversation(conversation: CoachConversation) {
+    if (streaming || !userId) return
+    setError('')
+    const { data, error: loadError } = await supabase
+      .from('coach_messages')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('conversation_id', conversation.id)
+      .order('created_at', { ascending: true })
+
+    if (loadError) {
+      setError('Unable to load that conversation.')
+      return
+    }
+
+    const savedMessages = (data ?? []) as SavedCoachMessage[]
+    setMessages(savedMessages.map(({ role, content }) => ({ role, content })))
+    setConversationId(conversation.id)
+    setHistoryOpen(false)
+  }
+
+  function startNewConversation() {
+    if (streaming) return
+    setConversationId(null)
+    setMessages([INITIAL_MESSAGE])
+    setInput('')
+    setError('')
+    setHistoryOpen(false)
+    textareaRef.current?.focus()
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -141,10 +246,18 @@ export default function CoachPage() {
   }
 
   return (
-    <div style={{ background: '#0E1C12', display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 128px)' }}>
+    <div style={{ background: '#0E1C12', display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 146px)' }}>
 
       {/* Header */}
       <div style={{ padding: '16px 24px 0', flexShrink: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginBottom: '8px' }}>
+          <button onClick={() => setHistoryOpen(value => !value)} disabled={streaming} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 12px', borderRadius: '100px', border: '1px solid rgba(255,255,255,0.1)', background: historyOpen ? 'rgba(201,162,39,0.14)' : '#1A2E1E', color: historyOpen ? '#F2D98A' : '#BDB5A0', cursor: streaming ? 'default' : 'pointer', fontFamily: 'var(--font-dm-sans)', fontSize: '12px' }}>
+            {historyOpen ? <X size={15} /> : <History size={15} />} History
+          </button>
+          <button onClick={startNewConversation} disabled={streaming} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 12px', borderRadius: '100px', border: '1px solid rgba(201,162,39,0.35)', background: 'rgba(201,162,39,0.12)', color: '#F2D98A', cursor: streaming ? 'default' : 'pointer', fontFamily: 'var(--font-dm-sans)', fontSize: '12px' }}>
+            <Plus size={15} /> New chat
+          </button>
+        </div>
         <p style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#C9A227', marginBottom: '8px' }}>
           Clarity Coach
         </p>
@@ -155,6 +268,33 @@ export default function CoachPage() {
           AI-guided, culturally aware. Always available.
         </p>
       </div>
+
+      {historyOpen && (
+        <aside style={{ margin: '0 16px 12px', padding: '14px', background: '#142519', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', maxHeight: '260px', overflowY: 'auto', flexShrink: 0 }}>
+          <p style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#C9A227', marginBottom: '10px' }}>
+            Previous Conversations
+          </p>
+          {historyLoading ? (
+            <p style={{ color: '#BDB5A0', fontSize: '12px' }}>Loading history…</p>
+          ) : conversations.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '18px 8px' }}>
+              <MessageCircle size={22} color="#6B9E7A" style={{ marginBottom: '8px' }} />
+              <p style={{ color: '#BDB5A0', fontSize: '12px' }}>Your saved conversations will appear here.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+              {conversations.map(conversation => (
+                <button key={conversation.id} onClick={() => openConversation(conversation)} style={{ width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: '10px', border: `1px solid ${conversation.id === conversationId ? 'rgba(201,162,39,0.45)' : 'rgba(255,255,255,0.06)'}`, background: conversation.id === conversationId ? 'rgba(201,162,39,0.1)' : 'rgba(255,255,255,0.03)', color: '#F5F0E8', cursor: 'pointer', fontFamily: 'var(--font-dm-sans)' }}>
+                  <span style={{ display: 'block', fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{conversation.title}</span>
+                  <span style={{ display: 'block', fontSize: '10px', color: '#BDB5A0', marginTop: '3px' }}>
+                    {new Date(conversation.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </aside>
+      )}
 
       {/* Messages area */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 8px' }}>

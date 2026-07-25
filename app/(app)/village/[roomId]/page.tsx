@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ArrowLeft, Send, Mic, MicOff, Video, VideoOff, Crown } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { VillageRoom, VillageMessage } from '@/lib/types'
+import type { RealtimePostgresInsertPayload } from '@supabase/supabase-js'
 
 const AVATAR_COLORS = ['#4A7C59', '#C9A227', '#7BADC4', '#C4614A', '#A8C4AF', '#E8B84B']
 
@@ -88,16 +89,16 @@ export default function RoomPage() {
   }
 
   async function loadModerators() {
-    const { data } = await supabase
-      .from('village_memberships').select('user_id')
-      .eq('room_id', roomId).eq('is_moderator', true)
-    if (data) setModeratorIds(new Set(data.map(m => m.user_id)))
+    const { data } = await supabase.rpc('get_village_moderator_ids', {
+      target_room_id: roomId,
+    })
+    if (data) setModeratorIds(new Set(data))
   }
 
   function subscribeToMessages() {
     supabase.channel(`room:${roomId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'village_messages', filter: `room_id=eq.${roomId}` },
-        async (payload) => {
+        async (payload: RealtimePostgresInsertPayload<{ id: string }>) => {
           const { data: newMsg } = await supabase.from('village_messages').select('*, profiles(name, username)').eq('id', payload.new.id).single()
           if (newMsg) {
             setMessages(prev => [...prev, newMsg as VillageMessage])
@@ -109,11 +110,13 @@ export default function RoomPage() {
 
   async function joinRoom() {
     if (!currentUser) return
-    const { count } = await supabase.from('village_memberships').select('*', { count: 'exact', head: true }).eq('room_id', roomId)
-    const isFirst = (count ?? 0) === 0
-    await supabase.from('village_memberships').insert({ user_id: currentUser.id, room_id: roomId, is_moderator: isFirst })
+    const { data: isFirst, error } = await supabase.rpc('join_village_room', { target_room_id: roomId })
+    if (error) {
+      console.error('Unable to join room:', error)
+      return
+    }
     setIsMember(true)
-    setIsModerator(isFirst)
+    setIsModerator(Boolean(isFirst))
     if (isFirst) setModeratorIds(new Set([currentUser.id]))
     await loadMessages()
     await loadModerators()
@@ -139,7 +142,7 @@ export default function RoomPage() {
         stream.getTracks().forEach(t => t.stop())
         if (audioChunksRef.current.length === 0 || !currentUser) return
         const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
-        const fileName = `${roomId}/${Date.now()}-${currentUser.id}.webm`
+        const fileName = `${currentUser.id}/${roomId}/${Date.now()}.webm`
         const { error: uploadError } = await supabase.storage.from('village-audio').upload(fileName, blob, { contentType: 'audio/webm' })
         if (uploadError) { console.error('Audio upload failed:', uploadError); return }
         const { data: { publicUrl } } = supabase.storage.from('village-audio').getPublicUrl(fileName)
@@ -184,7 +187,7 @@ export default function RoomPage() {
         if (videoChunksRef.current.length === 0 || !currentUser) return
         const ext = mimeType.includes('mp4') ? 'mp4' : 'webm'
         const blob = new Blob(videoChunksRef.current, { type: mimeType })
-        const fileName = `${roomId}/video-${Date.now()}-${currentUser.id}.${ext}`
+        const fileName = `${currentUser.id}/${roomId}/video-${Date.now()}.${ext}`
         const { error: uploadError } = await supabase.storage.from('village-audio').upload(fileName, blob, { contentType: mimeType })
         if (uploadError) { console.error('Video upload failed:', uploadError); return }
         const { data: { publicUrl } } = supabase.storage.from('village-audio').getPublicUrl(fileName)
@@ -217,7 +220,14 @@ export default function RoomPage() {
 
   async function assignModerator(userId: string) {
     if (!isModerator || userId === currentUser?.id) return
-    await supabase.from('village_memberships').update({ is_moderator: true }).eq('user_id', userId).eq('room_id', roomId)
+    const { error } = await supabase.rpc('assign_village_moderator', {
+      target_room_id: roomId,
+      target_user_id: userId,
+    })
+    if (error) {
+      console.error('Unable to assign moderator:', error)
+      return
+    }
     setModeratorIds(prev => new Set([...prev, userId]))
   }
 
@@ -236,7 +246,7 @@ export default function RoomPage() {
   }
 
   return (
-    <div style={{ background: '#0E1C12', display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 96px)' }}>
+    <div style={{ background: '#0E1C12', display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 146px)' }}>
 
       {/* Room header */}
       <div style={{ padding: '12px 16px', background: 'rgba(26,46,30,0.9)', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
@@ -273,7 +283,7 @@ export default function RoomPage() {
       ) : (
         <>
           {/* Messages */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {messages.length === 0 && (
               <div style={{ textAlign: 'center', padding: '40px 0' }}>
                 <p style={{ fontSize: '13px', color: '#BDB5A0', lineHeight: 1.5 }}>
@@ -304,7 +314,7 @@ export default function RoomPage() {
                       {getInitials(name)}
                     </button>
                   )}
-                  <div style={{ maxWidth: '75%' }}>
+                  <div style={{ maxWidth: '88%' }}>
                     {!isOwn && (
                       <p style={{ fontSize: '10px', color: '#BDB5A0', marginBottom: '3px', marginLeft: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                         {name}
@@ -312,11 +322,11 @@ export default function RoomPage() {
                       </p>
                     )}
                     <div style={{
-                      padding: (msg.message_type === 'audio' || msg.message_type === 'video') ? '6px 8px' : '10px 14px',
+                      padding: (msg.message_type === 'audio' || msg.message_type === 'video') ? '6px 8px' : '9px 12px',
                       borderRadius: isOwn ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
                       background: isOwn ? 'rgba(201,162,39,0.15)' : 'rgba(74,124,89,0.2)',
                       border: `1px solid ${isOwn ? 'rgba(201,162,39,0.25)' : 'rgba(74,124,89,0.3)'}`,
-                      fontSize: '13px', color: '#F5F0E8', lineHeight: 1.5,
+                      fontSize: '15px', color: '#F5F0E8', lineHeight: 1.45,
                     }}>
                       {msg.message_type === 'audio' && msg.audio_url ? (
                         <audio controls src={msg.audio_url} style={{ height: '32px', maxWidth: '200px', display: 'block' }} />

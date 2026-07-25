@@ -1,16 +1,15 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
-import { User, AtSign, LogOut, Check, AlertCircle } from 'lucide-react'
+import Link from 'next/link'
+import { User, AtSign, LogOut, Check, AlertCircle, ArrowLeft } from 'lucide-react'
+import { getUsernameError, normalizeUsername } from '@/lib/profile/username'
+import { createClient } from '@/lib/supabase/client'
 
 export default function SettingsPage() {
   const router = useRouter()
-  const supabase = createBrowserClient<any>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+  const supabase = createClient()
 
   const [name, setName] = useState('')
   const [username, setUsername] = useState('')
@@ -47,7 +46,13 @@ export default function SettingsPage() {
     setUsernameError('')
     setSaved(false)
 
-    const trimmedUsername = username.trim().toLowerCase()
+    const trimmedUsername = normalizeUsername(username)
+    const validationError = getUsernameError(username)
+    if (validationError) {
+      setUsernameError(validationError)
+      setSaving(false)
+      return
+    }
 
     if (trimmedUsername && trimmedUsername !== originalUsername) {
       const { data: existing } = await supabase
@@ -63,13 +68,18 @@ export default function SettingsPage() {
       }
     }
 
-    await supabase
+    const { error } = await supabase
       .from('profiles')
       .update({
         name: name.trim() || null,
         username: trimmedUsername || null,
       })
       .eq('id', userId)
+    if (error) {
+      setUsernameError(error.code === '23505' ? 'That username is already taken' : 'Unable to save your profile')
+      setSaving(false)
+      return
+    }
 
     setOriginalName(name.trim())
     setOriginalUsername(trimmedUsername)
@@ -87,6 +97,9 @@ export default function SettingsPage() {
 
   return (
     <div style={{ padding: '24px', maxWidth: '430px', margin: '0 auto' }}>
+      <Link href="/home" style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', color: '#BDB5A0', textDecoration: 'none', fontSize: '13px', marginBottom: '18px' }}>
+        <ArrowLeft size={17} /> Back to Home
+      </Link>
       <h1 style={{
         fontFamily: 'var(--font-playfair)',
         fontSize: '26px', color: '#F5F0E8',

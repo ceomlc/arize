@@ -4,6 +4,7 @@ import { BottomNav } from '@/components/nav/BottomNav'
 import { WelcomeModal } from '@/components/WelcomeModal'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { AppHeader } from '@/components/nav/AppHeader'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -14,10 +15,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div style={{ background: '#0A1409', minHeight: '100dvh' }}>
       <div className="app-container">
+        <AppHeader />
         {/* Page content */}
-        <div style={{ paddingTop: '16px', paddingBottom: '80px', minHeight: '100dvh' }}>
+        <main style={{ paddingBottom: '88px', minHeight: 'calc(100dvh - 58px)' }}>
           {children}
-        </div>
+        </main>
         <BottomNav />
         <WelcomeModal />
       </div>

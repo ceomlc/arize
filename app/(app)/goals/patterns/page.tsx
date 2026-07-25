@@ -38,28 +38,31 @@ export default function PatternMapPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    async function loadData() {
+      setLoading(true)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setLoading(false)
+        return
+      }
+
+      const days = TIME_FILTERS[activeFilter].days
+      const since = new Date()
+      since.setDate(since.getDate() - days)
+
+      const { data } = await supabase
+        .from('check_ins')
+        .select('*')
+        .eq('user_id', user.id)
+        .gte('created_at', since.toISOString())
+        .order('created_at', { ascending: true })
+
+      setCheckIns(data ?? [])
+      setLoading(false)
+    }
+
     loadData()
-  }, [activeFilter])
-
-  async function loadData() {
-    setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    const days = TIME_FILTERS[activeFilter].days
-    const since = new Date()
-    since.setDate(since.getDate() - days)
-
-    const { data } = await supabase
-      .from('check_ins')
-      .select('*')
-      .eq('user_id', user.id)
-      .gte('created_at', since.toISOString())
-      .order('created_at', { ascending: true })
-
-    setCheckIns(data ?? [])
-    setLoading(false)
-  }
+  }, [activeFilter, supabase])
 
   // Build chart points
   const W = 342, H = 100, PAD = 20

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Sparkles, Eye, EyeOff, ArrowRight } from 'lucide-react'
+import { Eye, EyeOff, ArrowRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 export default function SignInPage() {
@@ -53,7 +53,9 @@ export default function SignInPage() {
 
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-          <img src="/flower%20nobg.png" alt="Arize" style={{ width: '72px', height: '72px', objectFit: 'contain', display: 'block', margin: '0 auto 16px' }} />
+          <Link href="/" aria-label="Arize home">
+            <img src="/flower%20nobg.png" alt="Arize" style={{ width: '72px', height: '72px', objectFit: 'contain', display: 'block', margin: '0 auto 16px' }} />
+          </Link>
           <h1 style={{ fontFamily: 'var(--font-playfair)', fontSize: '28px', color: '#F5F0E8', fontWeight: 400, marginBottom: '6px' }}>
             Welcome back
           </h1>

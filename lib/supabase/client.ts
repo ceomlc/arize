@@ -1,10 +1,11 @@
 import { createBrowserClient } from '@supabase/ssr'
 
-// Note: once you run `supabase gen types typescript`, replace `any` with the generated Database type
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let browserClient: ReturnType<typeof createBrowserClient> | undefined
+
 export function createClient() {
-  return createBrowserClient<any>(
+  browserClient ??= createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   )
+  return browserClient
 }

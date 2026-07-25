@@ -12,6 +12,7 @@ create extension if not exists "uuid-ossp";
 create table if not exists profiles (
   id uuid references auth.users on delete cascade primary key,
   name text,
+  username text,
   role text,
   company text,
   avatar_url text,
@@ -53,6 +54,7 @@ create table if not exists check_ins (
   energy int check (energy between 0 and 10) not null,
   emotion_tags text[] default '{}',
   journal_text text,
+  time_of_day text check (time_of_day in ('morning','midday','evening')) default 'morning',
   created_at timestamptz default now()
 );
 
@@ -65,11 +67,12 @@ create table if not exists goals (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references profiles(id) on delete cascade not null,
   title text not null,
-  category text check (category in ('Career','Wellness','Deliverable','Reflection','Personal')) default 'Personal',
+  category text check (category in ('Career','Wellness','Reflection','Personal')) default 'Personal',
   progress int check (progress between 0 and 100) default 0,
   deadline date,
   week_of date,
   is_complete boolean default false,
+  notes text,
   created_at timestamptz default now()
 );
 
@@ -101,6 +104,7 @@ create table if not exists village_memberships (
   user_id uuid references profiles(id) on delete cascade not null,
   room_id uuid references village_rooms(id) on delete cascade not null,
   joined_at timestamptz default now(),
+  is_moderator boolean default false,
   primary key (user_id, room_id)
 );
 
@@ -112,6 +116,8 @@ create table if not exists village_messages (
   room_id uuid references village_rooms(id) on delete cascade not null,
   user_id uuid references profiles(id) on delete cascade not null,
   content text not null,
+  message_type text check (message_type in ('text','audio','video')) default 'text',
+  audio_url text,
   created_at timestamptz default now()
 );
 
@@ -132,61 +138,283 @@ create table if not exists friday_reflections (
 create index if not exists friday_reflections_user_id on friday_reflections (user_id, created_at desc);
 
 -- ============================================================
+-- COACH REQUEST QUOTAS
+-- ============================================================
+create table if not exists coach_requests (
+  id bigint generated always as identity primary key,
+  user_id uuid references profiles(id) on delete cascade not null,
+  created_at timestamptz default now() not null
+);
+
+create index if not exists coach_requests_user_id_created_at
+  on coach_requests (user_id, created_at desc);
+
+create table if not exists coach_conversations (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references profiles(id) on delete cascade not null,
+  title text not null check (char_length(title) between 1 and 120),
+  created_at timestamptz default now() not null,
+  updated_at timestamptz default now() not null
+);
+
+create index if not exists coach_conversations_user_updated_at
+  on coach_conversations (user_id, updated_at desc);
+
+create table if not exists coach_messages (
+  id bigint generated always as identity primary key,
+  conversation_id uuid references coach_conversations(id) on delete cascade not null,
+  user_id uuid references profiles(id) on delete cascade not null,
+  role text check (role in ('user','assistant')) not null,
+  content text check (char_length(content) between 1 and 8000) not null,
+  created_at timestamptz default now() not null
+);
+
+create index if not exists coach_messages_conversation_created_at
+  on coach_messages (conversation_id, created_at asc);
+
+create unique index if not exists profiles_username_unique
+  on profiles (lower(username))
+  where username is not null;
+
+alter table profiles drop constraint if exists profiles_username_format;
+alter table profiles add constraint profiles_username_format
+  check (username is null or username ~ '^[a-z0-9_]{3,30}$');
+
+-- ============================================================
 -- ROW LEVEL SECURITY
 -- ============================================================
 
 -- Profiles: users can only read/update their own
 alter table profiles enable row level security;
-create policy "profiles: own read" on profiles for select using (auth.uid() = id);
-create policy "profiles: own update" on profiles for update using (auth.uid() = id);
+create policy "profiles: own read" on profiles for select to authenticated using ((select auth.uid()) = id);
+create policy "profiles: own update" on profiles for update to authenticated
+  using ((select auth.uid()) = id)
+  with check ((select auth.uid()) = id);
 
 -- Check-ins: users can only read/write their own
 alter table check_ins enable row level security;
-create policy "check_ins: own read" on check_ins for select using (auth.uid() = user_id);
-create policy "check_ins: own insert" on check_ins for insert with check (auth.uid() = user_id);
+create policy "check_ins: own read" on check_ins for select to authenticated using ((select auth.uid()) = user_id);
+create policy "check_ins: own insert" on check_ins for insert to authenticated with check ((select auth.uid()) = user_id);
 
 -- Goals: users can only read/write their own
 alter table goals enable row level security;
-create policy "goals: own read" on goals for select using (auth.uid() = user_id);
-create policy "goals: own insert" on goals for insert with check (auth.uid() = user_id);
-create policy "goals: own update" on goals for update using (auth.uid() = user_id);
-create policy "goals: own delete" on goals for delete using (auth.uid() = user_id);
+create policy "goals: own read" on goals for select to authenticated using ((select auth.uid()) = user_id);
+create policy "goals: own insert" on goals for insert to authenticated with check ((select auth.uid()) = user_id);
+create policy "goals: own update" on goals for update to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+create policy "goals: own delete" on goals for delete to authenticated using ((select auth.uid()) = user_id);
 
 -- Village rooms: all authenticated users can read
 alter table village_rooms enable row level security;
-create policy "village_rooms: auth read" on village_rooms for select using (auth.role() = 'authenticated');
+create policy "village_rooms: auth read" on village_rooms for select to authenticated using (true);
 
 -- Village memberships: own read/write
 alter table village_memberships enable row level security;
-create policy "memberships: own read" on village_memberships for select using (auth.uid() = user_id);
-create policy "memberships: own insert" on village_memberships for insert with check (auth.uid() = user_id);
-create policy "memberships: own delete" on village_memberships for delete using (auth.uid() = user_id);
+create policy "memberships: own read" on village_memberships for select to authenticated
+  using ((select auth.uid()) = user_id);
+create policy "memberships: own insert" on village_memberships for insert to authenticated
+  with check ((select auth.uid()) = user_id and is_moderator = false);
+create policy "memberships: own delete" on village_memberships for delete to authenticated
+  using ((select auth.uid()) = user_id);
 
 -- Village messages: members can read/write room messages
 alter table village_messages enable row level security;
-create policy "messages: member read" on village_messages for select
+create policy "messages: member read" on village_messages for select to authenticated
   using (
     exists (
       select 1 from village_memberships
       where village_memberships.room_id = village_messages.room_id
-      and village_memberships.user_id = auth.uid()
+      and village_memberships.user_id = (select auth.uid())
     )
   );
-create policy "messages: member insert" on village_messages for insert
+create policy "messages: member insert" on village_messages for insert to authenticated
   with check (
-    auth.uid() = user_id
+    (select auth.uid()) = user_id
     and exists (
       select 1 from village_memberships
       where village_memberships.room_id = village_messages.room_id
-      and village_memberships.user_id = auth.uid()
+      and village_memberships.user_id = (select auth.uid())
     )
   );
 
 -- Friday reflections: own read/write
 alter table friday_reflections enable row level security;
-create policy "reflections: own read" on friday_reflections for select using (auth.uid() = user_id);
-create policy "reflections: own insert" on friday_reflections for insert with check (auth.uid() = user_id);
-create policy "reflections: own update" on friday_reflections for update using (auth.uid() = user_id);
+create policy "reflections: own read" on friday_reflections for select to authenticated using ((select auth.uid()) = user_id);
+create policy "reflections: own insert" on friday_reflections for insert to authenticated with check ((select auth.uid()) = user_id);
+create policy "reflections: own update" on friday_reflections for update to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+
+alter table coach_requests enable row level security;
+alter table coach_conversations enable row level security;
+alter table coach_messages enable row level security;
+
+create policy "coach conversations: own read" on coach_conversations for select to authenticated
+  using ((select auth.uid()) = user_id);
+create policy "coach conversations: own insert" on coach_conversations for insert to authenticated
+  with check ((select auth.uid()) = user_id);
+create policy "coach conversations: own update" on coach_conversations for update to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+create policy "coach conversations: own delete" on coach_conversations for delete to authenticated
+  using ((select auth.uid()) = user_id);
+
+create policy "coach messages: own read" on coach_messages for select to authenticated
+  using ((select auth.uid()) = user_id);
+create policy "coach messages: own insert" on coach_messages for insert to authenticated
+  with check (
+    (select auth.uid()) = user_id
+    and exists (
+      select 1 from coach_conversations
+      where coach_conversations.id = coach_messages.conversation_id
+        and coach_conversations.user_id = (select auth.uid())
+    )
+  );
+
+-- Atomic, authenticated quota consumption. Direct access to coach_requests stays denied.
+create or replace function public.consume_coach_quota()
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  current_user_id uuid := auth.uid();
+  minute_count integer;
+  day_count integer;
+begin
+  if current_user_id is null then
+    raise exception 'authentication required';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(current_user_id::text, 0));
+
+  select count(*) into minute_count
+  from public.coach_requests
+  where user_id = current_user_id
+    and created_at >= now() - interval '1 minute';
+
+  if minute_count >= 10 then
+    return jsonb_build_object('allowed', false, 'retry_after_seconds', 60);
+  end if;
+
+  select count(*) into day_count
+  from public.coach_requests
+  where user_id = current_user_id
+    and created_at >= now() - interval '1 day';
+
+  if day_count >= 100 then
+    return jsonb_build_object('allowed', false, 'retry_after_seconds', 3600);
+  end if;
+
+  insert into public.coach_requests (user_id) values (current_user_id);
+  delete from public.coach_requests
+  where user_id = current_user_id
+    and created_at < now() - interval '1 day';
+
+  return jsonb_build_object('allowed', true, 'retry_after_seconds', 0);
+end;
+$$;
+
+create or replace function public.join_village_room(target_room_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  current_user_id uuid := auth.uid();
+  should_moderate boolean;
+begin
+  if current_user_id is null then
+    raise exception 'authentication required';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(target_room_id::text, 0));
+  select not exists (
+    select 1 from public.village_memberships where room_id = target_room_id
+  ) into should_moderate;
+
+  insert into public.village_memberships (user_id, room_id, is_moderator)
+  values (current_user_id, target_room_id, should_moderate)
+  on conflict (user_id, room_id) do nothing;
+
+  select is_moderator into should_moderate
+  from public.village_memberships
+  where user_id = current_user_id and room_id = target_room_id;
+
+  return coalesce(should_moderate, false);
+end;
+$$;
+
+create or replace function public.assign_village_moderator(target_room_id uuid, target_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null or not exists (
+    select 1
+    from public.village_memberships
+    where room_id = target_room_id
+      and user_id = auth.uid()
+      and is_moderator = true
+  ) then
+    raise exception 'moderator permission required';
+  end if;
+
+  update public.village_memberships
+  set is_moderator = true
+  where room_id = target_room_id and user_id = target_user_id;
+
+  if not found then
+    raise exception 'target user is not a room member';
+  end if;
+end;
+$$;
+
+create or replace function public.get_village_moderator_ids(target_room_id uuid)
+returns setof uuid
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select member.user_id
+  from public.village_memberships member
+  where member.room_id = target_room_id
+    and member.is_moderator = true
+    and exists (
+      select 1
+      from public.village_memberships viewer
+      where viewer.room_id = target_room_id
+        and viewer.user_id = auth.uid()
+    );
+$$;
+
+revoke all on table coach_requests from anon, authenticated;
+revoke all on function public.consume_coach_quota() from public;
+revoke all on function public.join_village_room(uuid) from public;
+revoke all on function public.assign_village_moderator(uuid, uuid) from public;
+revoke all on function public.get_village_moderator_ids(uuid) from public;
+grant execute on function public.consume_coach_quota() to authenticated;
+grant execute on function public.join_village_room(uuid) to authenticated;
+grant execute on function public.assign_village_moderator(uuid, uuid) to authenticated;
+grant execute on function public.get_village_moderator_ids(uuid) to authenticated;
+
+-- Explicit Data API grants for projects that do not auto-expose new tables.
+grant select, update on profiles to authenticated;
+grant select, insert on check_ins to authenticated;
+grant select, insert, update, delete on goals to authenticated;
+grant select on village_rooms to authenticated;
+grant select, insert, delete on village_memberships to authenticated;
+grant select, insert on village_messages to authenticated;
+grant select, insert, update on friday_reflections to authenticated;
+grant select, insert, update, delete on coach_conversations to authenticated;
+grant select, insert on coach_messages to authenticated;
+grant all on all tables in schema public to service_role;
 
 -- Enable realtime for village messages
 alter publication supabase_realtime add table village_messages;

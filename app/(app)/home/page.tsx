@@ -7,7 +7,7 @@ export default async function HomePage() {
   const { data: { user } } = await supabase.auth.getUser()
 
   let profile = null
-  let goalsThisWeek = { total: 0, complete: 0 }
+  const goalsThisWeek = { total: 0, complete: 0 }
   let villageCount = 0
   let avgMood = 0
   let recentCheckIn = null
@@ -71,6 +71,17 @@ export default async function HomePage() {
   const hasCheckedInToday = recentCheckIn
     ? new Date(recentCheckIn.created_at).toDateString() === today.toDateString()
     : false
+  const moodLabel = avgMood <= 0
+    ? null
+    : avgMood < 1.8
+      ? 'Tense'
+      : avgMood < 2.8
+        ? 'Low'
+        : avgMood < 3.8
+          ? 'Steady'
+          : avgMood < 4.6
+            ? 'Grounded'
+            : 'Thriving'
 
   return (
     <div style={{ background: '#0E1C12', minHeight: '100%', paddingBottom: '16px' }}>
@@ -157,8 +168,8 @@ export default async function HomePage() {
           {
             icon: <Heart size={16} color="#C4614A" />,
             iconBg: 'rgba(196,97,74,0.15)',
-            value: avgMood > 0 ? avgMood : '—',
-            label: 'Avg. mood score',
+            value: avgMood > 0 ? `${avgMood}/5` : '—',
+            label: moodLabel ? `Avg. mood · ${moodLabel}` : 'Avg. mood score',
           },
         ].map((stat, i) => (
           <div key={i} style={{

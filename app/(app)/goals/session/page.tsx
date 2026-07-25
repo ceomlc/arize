@@ -7,13 +7,22 @@ import { Plus, Trash2, ArrowLeft, MessageCircle, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { GoalCategory } from '@/lib/types'
 
-const CATEGORIES: GoalCategory[] = ['Career', 'Wellness', 'Deliverable', 'Reflection', 'Personal']
+const CATEGORIES: GoalCategory[] = ['Career', 'Wellness', 'Reflection', 'Personal']
 
 interface DraftGoal {
+  id?: string
   title: string
   category: GoalCategory
   deadline: string
   notes: string
+}
+
+type StoredGoal = {
+  id: string
+  title: string
+  category: string | null
+  deadline: string | null
+  notes: string | null
 }
 
 function getWeekStart() {
@@ -27,6 +36,7 @@ export default function GoalSessionPage() {
   const router = useRouter()
   const supabase = createClient()
   const [goals, setGoals] = useState<DraftGoal[]>([{ title: '', category: 'Personal', deadline: '', notes: '' }])
+  const [originalGoalIds, setOriginalGoalIds] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [expandedNotes, setExpandedNotes] = useState<number | null>(null)
@@ -46,9 +56,13 @@ export default function GoalSessionPage() {
         .order('created_at', { ascending: true })
 
       if (data && data.length > 0) {
-        setGoals(data.map(g => ({
+        setOriginalGoalIds(data.map((goal: StoredGoal) => goal.id))
+        setGoals(data.map((g: StoredGoal) => ({
+          id: g.id,
           title: g.title,
-          category: (g.category as GoalCategory) ?? 'Personal',
+          category: g.category === 'Deliverable' || !CATEGORIES.includes(g.category as GoalCategory)
+            ? 'Personal'
+            : g.category as GoalCategory,
           deadline: g.deadline ?? '',
           notes: g.notes ?? '',
         })))
@@ -80,10 +94,42 @@ export default function GoalSessionPage() {
     if (!user) { router.push('/sign-in'); return }
 
     const weekStr = weekStart.toISOString().split('T')[0]
-    await supabase.from('goals').delete().eq('user_id', user.id).eq('week_of', weekStr)
+    const retainedIds = validGoals.flatMap(goal => goal.id ? [goal.id] : [])
+    const removedIds = originalGoalIds.filter(id => !retainedIds.includes(id))
+    if (removedIds.length > 0) {
+      const { error: deleteError } = await supabase
+        .from('goals')
+        .delete()
+        .eq('user_id', user.id)
+        .in('id', removedIds)
+      if (deleteError) {
+        setError('Failed to remove deleted goals. Please try again.')
+        setSaving(false)
+        return
+      }
+    }
 
-    const { error: insertError } = await supabase.from('goals').insert(
-      validGoals.map(g => ({
+    const existingGoals = validGoals.filter((goal): goal is DraftGoal & { id: string } => Boolean(goal.id))
+    const newGoals = validGoals.filter(goal => !goal.id)
+
+    const updateResults = await Promise.all(existingGoals.map(goal =>
+      supabase.from('goals').update({
+        title: goal.title.trim() || goal.notes.trim(),
+        category: goal.category,
+        deadline: goal.deadline || null,
+        notes: goal.notes || null,
+      }).eq('id', goal.id).eq('user_id', user.id)
+    ))
+    const updateError = updateResults.find(result => result.error)?.error
+    if (updateError) {
+      setError('Failed to update goals. Please try again.')
+      setSaving(false)
+      return
+    }
+
+    if (newGoals.length > 0) {
+      const { error: insertError } = await supabase.from('goals').insert(
+        newGoals.map(g => ({
         user_id: user.id,
         title: g.title.trim() || g.notes.trim(),
         category: g.category,
@@ -92,10 +138,14 @@ export default function GoalSessionPage() {
         week_of: weekStr,
         progress: 0,
         is_complete: false,
-      }))
-    )
-
-    if (insertError) { setError('Failed to save goals. Please try again.'); setSaving(false); return }
+        }))
+      )
+      if (insertError) {
+        setError('Failed to add goals. Please try again.')
+        setSaving(false)
+        return
+      }
+    }
     router.push('/goals')
   }
 

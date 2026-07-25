@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Plus, TrendingUp } from 'lucide-react'
+import { Plus, TrendingUp, ChevronLeft, ChevronRight, Check } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { Goal } from '@/lib/types'
 
@@ -15,19 +15,29 @@ function getWeekStart(date = new Date()) {
   return d
 }
 
+function dateKey(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export default function GoalsPage() {
   const supabase = createClient()
   const [goals, setGoals] = useState<Goal[]>([])
   const [loading, setLoading] = useState(true)
   const [today] = useState(new Date())
-  const todayDow = today.getDay()
+  const [weekStart, setWeekStart] = useState(() => getWeekStart())
+  const [selectedDay, setSelectedDay] = useState(today.getDay())
+  const currentWeekStart = getWeekStart(today)
+  const weekKey = dateKey(weekStart)
+  const isCurrentWeek = weekKey === dateKey(currentWeekStart)
 
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const weekStart = getWeekStart()
       const weekEnd = new Date(weekStart)
       weekEnd.setDate(weekEnd.getDate() + 7)
 
@@ -35,15 +45,15 @@ export default function GoalsPage() {
         .from('goals')
         .select('*')
         .eq('user_id', user.id)
-        .gte('week_of', weekStart.toISOString().split('T')[0])
-        .lt('week_of', weekEnd.toISOString().split('T')[0])
+        .gte('week_of', dateKey(weekStart))
+        .lt('week_of', dateKey(weekEnd))
         .order('created_at', { ascending: true })
 
       setGoals(data ?? [])
       setLoading(false)
     }
     load()
-  }, [])
+  }, [supabase, weekKey, weekStart])
 
   async function toggleGoal(goal: Goal) {
     const updated = !goal.is_complete
@@ -54,9 +64,25 @@ export default function GoalsPage() {
     setGoals(prev => prev.map(g => g.id === goal.id ? { ...g, is_complete: updated, progress: updated ? 100 : g.progress } : g))
   }
 
-  const weekStart = getWeekStart()
   const weekLabel = `Week of ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
   const doneCount = goals.filter(g => g.is_complete).length
+  const selectedDate = new Date(weekStart)
+  selectedDate.setDate(selectedDate.getDate() + selectedDay)
+  const selectedDateKey = dateKey(selectedDate)
+  const selectedGoals = goals.filter(goal => !goal.deadline || goal.deadline === selectedDateKey)
+  const selectedDayLabel = selectedDate.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+  })
+
+  function moveWeek(direction: -1 | 1) {
+    const nextWeek = new Date(weekStart)
+    nextWeek.setDate(nextWeek.getDate() + direction * 7)
+    if (nextWeek > currentWeekStart) return
+    setLoading(true)
+    setWeekStart(nextWeek)
+  }
 
   return (
     <div style={{ background: '#0E1C12', minHeight: '100%', paddingBottom: '16px' }}>
@@ -69,37 +95,51 @@ export default function GoalsPage() {
         <h2 style={{ fontFamily: 'var(--font-playfair)', fontSize: '24px', color: '#F5F0E8', fontWeight: 500, lineHeight: 1.3, marginBottom: '4px' }}>
           Intentional Goals
         </h2>
-        <p style={{ fontSize: '12px', color: '#BDB5A0' }}>
-          {weekLabel} · {doneCount} of {goals.length} {goals.length === 1 ? 'goal' : 'goals'} complete
-        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px' }}>
+          <button onClick={() => moveWeek(-1)} aria-label="View previous week" style={{ width: '30px', height: '30px', borderRadius: '50%', border: '1px solid rgba(255,255,255,0.1)', background: '#1A2E1E', color: '#BDB5A0', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
+            <ChevronLeft size={16} />
+          </button>
+          <p style={{ fontSize: '12px', color: '#BDB5A0', flex: 1 }}>
+            {weekLabel} · {doneCount} of {goals.length} complete
+          </p>
+          <button onClick={() => moveWeek(1)} disabled={isCurrentWeek} aria-label="View next week" style={{ width: '30px', height: '30px', borderRadius: '50%', border: '1px solid rgba(255,255,255,0.1)', background: '#1A2E1E', color: '#BDB5A0', display: 'grid', placeItems: 'center', cursor: isCurrentWeek ? 'default' : 'pointer', opacity: isCurrentWeek ? 0.3 : 1 }}>
+            <ChevronRight size={16} />
+          </button>
+        </div>
       </div>
 
       {/* Week rhythm */}
       <div style={{ margin: '18px 24px 0', display: 'flex', gap: '6px' }}>
         {DAY_LABELS.map((day, i) => {
-          const isToday = i === todayDow
-          const isPast = i < todayDow
+          const dayDate = new Date(weekStart)
+          dayDate.setDate(dayDate.getDate() + i)
+          const isToday = dateKey(dayDate) === dateKey(today)
+          const isPast = dayDate < new Date(today.getFullYear(), today.getMonth(), today.getDate())
+          const isSelected = i === selectedDay
           return (
-            <div key={day} style={{
+            <button key={day} onClick={() => setSelectedDay(i)} aria-label={`View goals for ${dayDate.toLocaleDateString()}`} style={{
               flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
               gap: '6px', padding: '10px 4px', borderRadius: '8px',
-              background: isToday ? 'rgba(201,162,39,0.12)' : '#1A2E1E',
-              border: `1px solid ${isToday ? '#C9A227' : 'rgba(255,255,255,0.05)'}`,
+              background: isSelected ? 'rgba(201,162,39,0.16)' : '#1A2E1E',
+              border: `1px solid ${isSelected ? '#C9A227' : isToday ? 'rgba(201,162,39,0.45)' : 'rgba(255,255,255,0.05)'}`,
               fontSize: '9px',
-              color: isToday ? '#C9A227' : '#BDB5A0',
+              color: isSelected ? '#F2D98A' : '#BDB5A0',
               letterSpacing: '0.05em', textTransform: 'uppercase',
+              cursor: 'pointer', fontFamily: 'var(--font-dm-sans)',
             }}>
               <div style={{
                 width: '7px', height: '7px', borderRadius: '50%',
                 background: isPast ? '#4A7C59' : isToday ? '#C9A227' : 'rgba(255,255,255,0.1)',
               }} />
-              {day}
-            </div>
+              <span>{day}</span>
+              <span style={{ fontSize: '9px' }}>{dayDate.getDate()}</span>
+            </button>
           )
         })}
       </div>
 
       {/* Sunday session banner */}
+      {isCurrentWeek && (
       <div style={{
         margin: '16px 24px 0',
         background: 'linear-gradient(135deg, rgba(36,61,40,1) 0%, rgba(14,28,18,1) 100%)',
@@ -126,6 +166,7 @@ export default function GoalsPage() {
           ✦ {goals.length > 0 ? 'Edit this week\'s goals' : 'Start this week\'s session'}
         </Link>
       </div>
+      )}
 
       {/* Pattern Map link */}
       <div style={{ margin: '12px 24px 0' }}>
@@ -142,38 +183,44 @@ export default function GoalsPage() {
 
       {/* Goals list */}
       <div style={{ margin: '16px 24px 0' }}>
-        <p style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#C9A227', marginBottom: '12px' }}>
-          This Week&apos;s Commitments
+        <p style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#C9A227', marginBottom: '4px' }}>
+          {selectedDayLabel}
+        </p>
+        <p style={{ fontSize: '12px', color: '#BDB5A0', marginBottom: '12px' }}>
+          Dated goals for this day plus your week-long commitments
         </p>
 
         {loading ? (
           <div style={{ textAlign: 'center', padding: '40px 0' }}>
             <p style={{ fontSize: '13px', color: '#BDB5A0' }}>Loading goals…</p>
           </div>
-        ) : goals.length === 0 ? (
+        ) : selectedGoals.length === 0 ? (
           <div style={{
             background: '#1A2E1E', border: '1px dashed rgba(255,255,255,0.1)',
             borderRadius: '12px', padding: '28px', textAlign: 'center',
           }}>
             <p style={{ fontSize: '14px', color: '#BDB5A0', marginBottom: '12px', lineHeight: 1.5 }}>
-              No goals set for this week yet.
+              No goals are scheduled for this day.
             </p>
-            <Link href="/goals/session" style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              background: '#C9A227', color: '#0E1C12', textDecoration: 'none',
-              padding: '10px 20px', borderRadius: '100px', fontSize: '13px', fontWeight: 600,
-            }}>
-              <Plus size={14} /> Set your goals
-            </Link>
+            {isCurrentWeek && (
+              <Link href="/goals/session" style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                background: '#C9A227', color: '#0E1C12', textDecoration: 'none',
+                padding: '10px 20px', borderRadius: '100px', fontSize: '13px', fontWeight: 600,
+              }}>
+                <Plus size={14} /> Set your goals
+              </Link>
+            )}
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {goals.map(goal => (
+            {selectedGoals.map(goal => (
               <div
                 key={goal.id}
                 style={{
                   background: '#1A2E1E', border: '1px solid rgba(255,255,255,0.05)',
                   borderRadius: '12px', padding: '14px 16px',
+                  opacity: goal.is_complete ? 0.62 : 1,
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '10px' }}>
@@ -188,12 +235,11 @@ export default function GoalsPage() {
                       color: 'white', fontSize: '10px',
                     }}
                   >
-                    {goal.is_complete && '✓'}
+                    {goal.is_complete && <Check size={12} strokeWidth={3} />}
                   </button>
                   <span style={{
                     fontSize: '13px', color: goal.is_complete ? '#BDB5A0' : '#F5F0E8',
                     lineHeight: 1.4, flex: 1,
-                    textDecoration: goal.is_complete ? 'line-through' : 'none',
                   }}>
                     {goal.title}
                   </span>
@@ -214,7 +260,7 @@ export default function GoalsPage() {
           </div>
         )}
 
-        <Link href="/goals/session" style={{
+        {isCurrentWeek && <Link href="/goals/session" style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
           background: 'transparent', border: '1px dashed rgba(255,255,255,0.12)',
           borderRadius: '12px', padding: '14px', color: '#BDB5A0',
@@ -222,7 +268,7 @@ export default function GoalsPage() {
           transition: 'all 0.2s',
         }}>
           <Plus size={14} /> Add a new commitment
-        </Link>
+        </Link>}
       </div>
 
       {/* Friday reflection link */}

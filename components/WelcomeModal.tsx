@@ -42,7 +42,7 @@ export function WelcomeModal() {
   useEffect(() => {
     try {
       const seen = localStorage.getItem('arize_welcomed')
-      if (!seen) setVisible(true)
+      if (!seen) queueMicrotask(() => setVisible(true))
     } catch {}
   }, [])
 

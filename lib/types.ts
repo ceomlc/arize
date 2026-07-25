@@ -16,6 +16,8 @@ export interface Database {
       village_memberships: { Row: VillageMembership; Insert: Partial<VillageMembership>; Update: Partial<VillageMembership> }
       village_messages: { Row: VillageMessage; Insert: Partial<VillageMessage>; Update: Partial<VillageMessage> }
       friday_reflections: { Row: FridayReflection; Insert: Partial<FridayReflection>; Update: Partial<FridayReflection> }
+      coach_conversations: { Row: CoachConversation; Insert: Partial<CoachConversation>; Update: Partial<CoachConversation> }
+      coach_messages: { Row: SavedCoachMessage; Insert: Partial<SavedCoachMessage>; Update: Partial<SavedCoachMessage> }
     }
     Views: Record<string, never>
     Functions: Record<string, never>
@@ -36,7 +38,7 @@ export interface Profile {
 }
 
 export type MoodType = 'tense' | 'meh' | 'steady' | 'grounded' | 'thriving'
-export type GoalCategory = 'Career' | 'Wellness' | 'Deliverable' | 'Reflection' | 'Personal'
+export type GoalCategory = 'Career' | 'Wellness' | 'Reflection' | 'Personal'
 export type TimeOfDay = 'morning' | 'midday' | 'evening'
 
 export interface CheckIn {
@@ -102,4 +104,19 @@ export interface FridayReflection {
 export interface CoachMessage {
   role: 'user' | 'assistant'
   content: string
+}
+
+export interface CoachConversation {
+  id: string
+  user_id: string
+  title: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SavedCoachMessage extends CoachMessage {
+  id: number
+  conversation_id: string
+  user_id: string
+  created_at: string
 }

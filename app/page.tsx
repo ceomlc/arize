@@ -46,11 +46,11 @@ export default function LandingPage() {
         position: 'sticky', top: 0,
         background: 'rgba(10,20,9,0.92)', backdropFilter: 'blur(12px)', zIndex: 50,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <Link href="/" aria-label="Arize home" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
           <img src="/flower%20nobg.png" alt="Arize" style={{ width: '28px', height: '28px', objectFit: 'contain' }} />
           <span style={{ fontFamily: 'var(--font-playfair)', fontSize: '18px', color: '#C9A227', letterSpacing: '0.05em' }}>Arize</span>
           <span style={{ fontSize: '11px', color: '#BDB5A0', letterSpacing: '0.08em' }}>by AmazeGen</span>
-        </div>
+        </Link>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           <Link href="/sign-in" style={{
             fontSize: '13px', color: '#BDB5A0', textDecoration: 'none',

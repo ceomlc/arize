@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sparkles, ArrowRight, Target, Users, TrendingUp, MessageCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { getUsernameError, normalizeUsername } from '@/lib/profile/username'
 
 const steps = [
   {
@@ -59,24 +60,35 @@ export default function OnboardingPage() {
 
   async function handleComplete() {
     setUsernameError('')
-    if (username.trim()) {
+    const normalizedUsername = normalizeUsername(username)
+    const validationError = getUsernameError(username)
+    if (validationError) {
+      setUsernameError(validationError)
+      return
+    }
+    if (normalizedUsername) {
       // Check uniqueness
       const supabase = createClient()
       const { data: existing } = await supabase
-        .from('profiles').select('id').eq('username', username.trim().toLowerCase()).single()
+        .from('profiles').select('id').eq('username', normalizedUsername).maybeSingle()
       if (existing) { setUsernameError('That username is taken — try another.'); return }
     }
     setSaving(true)
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      await supabase.from('profiles').update({
+      const { error } = await supabase.from('profiles').update({
         name: name || undefined,
-        username: username.trim().toLowerCase() || undefined,
+        username: normalizedUsername || undefined,
         role: role || undefined,
         company: company || undefined,
         onboarded: true,
       }).eq('id', user.id)
+      if (error) {
+        setSaving(false)
+        setUsernameError(error.code === '23505' ? 'That username is taken — try another.' : 'Unable to save your profile')
+        return
+      }
     }
     router.push('/home')
     router.refresh()

@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0a1409;
+  --foreground: #f5f0e8;
 }
 
 @theme inline {
@@ -22,5 +22,64 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-dm-sans), Arial, Helvetica, sans-serif;
+  font-size: 17px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.app-container {
+  width: 100%;
+  max-width: 760px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  background: #0e1c12;
+  box-shadow: 0 0 60px rgba(0, 0, 0, 0.28);
+}
+
+.app-header {
+  height: 58px;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(14, 28, 18, 0.96);
+}
+
+.app-logo-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #f5f0e8;
+  text-decoration: none;
+  font-family: var(--font-playfair);
+  font-size: 21px;
+  font-weight: 500;
+}
+
+.app-header-byline {
+  color: #bdb5a0;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+}
+
+/* The first version used 9–13px text throughout. Raise those small inline
+   sizes consistently while retaining the existing component hierarchy. */
+.app-container [style*="font-size: 9px"] { font-size: 12px !important; }
+.app-container [style*="font-size: 10px"] { font-size: 13px !important; }
+.app-container [style*="font-size: 11px"] { font-size: 14px !important; }
+.app-container [style*="font-size: 12px"] { font-size: 15px !important; }
+.app-container [style*="font-size: 13px"] { font-size: 16px !important; }
+
+@media (max-width: 520px) {
+  .app-header {
+    padding: 0 18px;
+  }
+
+  .app-container [style*="font-size: 9px"] { font-size: 11px !important; }
+  .app-container [style*="font-size: 10px"] { font-size: 12px !important; }
+  .app-container [style*="font-size: 11px"] { font-size: 13px !important; }
+  .app-container [style*="font-size: 12px"] { font-size: 14px !important; }
+  .app-container [style*="font-size: 13px"] { font-size: 15px !important; }
 }
