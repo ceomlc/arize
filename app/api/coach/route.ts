@@ -31,6 +31,33 @@ IMPORTANT LIMITS:
 - Do not roleplay as a real therapist or psychiatrist
 - If someone shares thoughts of self-harm, immediately provide crisis resources (988 Suicide & Crisis Lifeline) and encourage professional help`
 
+const fallbackQuotaRequests = new Map<string, number[]>()
+
+function consumeFallbackQuota(userId: string) {
+  const now = Date.now()
+  const oneMinuteAgo = now - 60_000
+  const oneDayAgo = now - 86_400_000
+  const recentRequests = (fallbackQuotaRequests.get(userId) ?? [])
+    .filter(timestamp => timestamp >= oneDayAgo)
+
+  if (recentRequests.filter(timestamp => timestamp >= oneMinuteAgo).length >= 10) {
+    return { allowed: false, retry_after_seconds: 60 }
+  }
+  if (recentRequests.length >= 100) {
+    return { allowed: false, retry_after_seconds: 3600 }
+  }
+
+  recentRequests.push(now)
+  fallbackQuotaRequests.set(userId, recentRequests)
+  return { allowed: true, retry_after_seconds: 0 }
+}
+
+function isMissingQuotaFunction(error: { code?: string; message?: string }) {
+  return error.code === 'PGRST202'
+    || error.code === '42883'
+    || error.message?.includes('consume_coach_quota')
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Verify auth
@@ -91,10 +118,18 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: validated.error }, { status: 400 })
     }
 
-    const { data: quota, error: quotaError } = await supabase.rpc('consume_coach_quota')
+    const { data: databaseQuota, error: quotaError } = await supabase.rpc('consume_coach_quota')
+    let quota = databaseQuota
     if (quotaError) {
-      console.error('[coach quota]', quotaError.message)
-      return Response.json({ error: 'Coach is temporarily unavailable' }, { status: 503 })
+      if (!isMissingQuotaFunction(quotaError)) {
+        console.error('[coach quota]', quotaError.message)
+        return Response.json({ error: 'Coach is temporarily unavailable' }, { status: 503 })
+      }
+
+      // Preserve rate limiting on the current server instance until the
+      // production Supabase migration installs consume_coach_quota().
+      console.warn('[coach quota] database function unavailable; using instance fallback')
+      quota = consumeFallbackQuota(user.id)
     }
     if (!quota?.allowed) {
       return Response.json(

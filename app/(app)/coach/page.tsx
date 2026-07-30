@@ -125,21 +125,30 @@ export default function CoachPage() {
           .insert({ user_id: activeUserId, title })
           .select('*')
           .single()
-        if (createError || !created) throw createError ?? new Error('Unable to create conversation')
-        activeConversationId = created.id
-        setConversationId(created.id)
-        setConversations(prev => [created as CoachConversation, ...prev])
+        if (createError || !created) {
+          // Conversation persistence was added after the original production
+          // schema. Keep Coach available while that migration is pending.
+          console.warn('[coach history] conversation persistence unavailable', createError?.code)
+        } else {
+          activeConversationId = created.id
+          setConversationId(created.id)
+          setConversations(prev => [created as CoachConversation, ...prev])
+        }
       }
 
-      const { error: userMessageError } = await supabase
-        .from('coach_messages')
-        .insert({
-          conversation_id: activeConversationId,
-          user_id: activeUserId,
-          role: 'user',
-          content: messageContent,
-        })
-      if (userMessageError) throw userMessageError
+      if (activeConversationId) {
+        const { error: userMessageError } = await supabase
+          .from('coach_messages')
+          .insert({
+            conversation_id: activeConversationId,
+            user_id: activeUserId,
+            role: 'user',
+            content: messageContent,
+          })
+        if (userMessageError) {
+          console.warn('[coach history] user message was not saved', userMessageError.code)
+        }
+      }
 
       const response = await fetch('/api/coach', {
         method: 'POST',
@@ -174,7 +183,7 @@ export default function CoachPage() {
         })
       }
 
-      if (assistantContent.trim()) {
+      if (assistantContent.trim() && activeConversationId) {
         const { error: assistantMessageError } = await supabase
           .from('coach_messages')
           .insert({
