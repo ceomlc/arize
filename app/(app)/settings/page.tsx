@@ -68,23 +68,33 @@ export default function SettingsPage() {
       }
     }
 
-    const { error } = await supabase
+    const savedName = name.trim()
+    const { data: updatedProfile, error } = await supabase
       .from('profiles')
       .update({
-        name: name.trim() || null,
+        name: savedName || null,
         username: trimmedUsername || null,
       })
       .eq('id', userId)
-    if (error) {
-      setUsernameError(error.code === '23505' ? 'That username is already taken' : 'Unable to save your profile')
+      .select('name, username')
+      .single()
+    if (error || !updatedProfile) {
+      setUsernameError(error?.code === '23505' ? 'That username is already taken' : 'Unable to save your profile')
       setSaving(false)
       return
     }
 
-    setOriginalName(name.trim())
-    setOriginalUsername(trimmedUsername)
+    await supabase.auth.updateUser({
+      data: { full_name: savedName || null },
+    })
+
+    setName(updatedProfile.name ?? '')
+    setUsername(updatedProfile.username ?? '')
+    setOriginalName(updatedProfile.name ?? '')
+    setOriginalUsername(updatedProfile.username ?? '')
     setSaving(false)
     setSaved(true)
+    router.refresh()
     setTimeout(() => setSaved(false), 2500)
   }
 

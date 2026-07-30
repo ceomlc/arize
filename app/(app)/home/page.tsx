@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { ArrowRight, Flame, CheckSquare, Users, Heart } from 'lucide-react'
+import HomeGreeting from '@/components/home/HomeGreeting'
 
 export default async function HomePage() {
   const supabase = await createClient()
@@ -61,7 +62,11 @@ export default async function HomePage() {
     }
   }
 
-  const firstName = profile?.name?.split(' ')[0] ?? 'there'
+  const metadataName = user
+    ? (user.user_metadata?.full_name ?? user.user_metadata?.name ?? '').trim()
+    : ''
+  const displayName = profile?.name?.trim() || metadataName
+  const firstName = displayName ? displayName.split(/\s+/)[0] : 'there'
   const today = new Date()
   const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
   const isMorning = today.getHours() < 12
@@ -87,13 +92,11 @@ export default async function HomePage() {
     <div style={{ background: '#0E1C12', minHeight: '100%', paddingBottom: '16px' }}>
 
       {/* Hero greeting */}
-      <div style={{ padding: '20px 24px 0' }}>
-        <p style={{ fontSize: '12px', color: '#BDB5A0', marginBottom: '4px', letterSpacing: '0.04em' }}>{greeting},</p>
-        <h1 style={{ fontFamily: 'var(--font-playfair)', fontSize: '28px', color: '#F5F0E8', fontWeight: 500, marginBottom: '2px', lineHeight: 1.2 }}>
-          {firstName} ✦
-        </h1>
-        <p style={{ fontSize: '12px', color: '#BDB5A0' }}>{dateStr}</p>
-      </div>
+      <HomeGreeting
+        initialFirstName={firstName}
+        initialGreeting={greeting}
+        initialDateLabel={dateStr}
+      />
 
       {/* Today card */}
       <div style={{
