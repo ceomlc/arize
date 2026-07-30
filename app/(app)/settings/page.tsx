@@ -3,9 +3,21 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { User, AtSign, LogOut, Check, AlertCircle, ArrowLeft } from 'lucide-react'
+import {
+  User,
+  AtSign,
+  LogOut,
+  Check,
+  AlertCircle,
+  ArrowLeft,
+  MessageSquareText,
+  ShieldCheck,
+  ChevronRight,
+} from 'lucide-react'
 import { getUsernameError, normalizeUsername } from '@/lib/profile/username'
 import { createClient } from '@/lib/supabase/client'
+
+const feedbackUrl = process.env.NEXT_PUBLIC_FEEDBACK_URL?.trim() || '/feedback'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -197,6 +209,49 @@ export default function SettingsPage() {
 
       {/* Divider */}
       <div style={{ height: '1px', background: 'rgba(255,255,255,0.07)', margin: '36px 0' }} />
+
+      {/* Support and privacy */}
+      <div style={{ marginBottom: '36px' }}>
+        <p style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#C9A227', marginBottom: '10px' }}>
+          Support & Privacy
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <a
+            href={feedbackUrl}
+            target={feedbackUrl.startsWith('http') ? '_blank' : undefined}
+            rel={feedbackUrl.startsWith('http') ? 'noreferrer' : undefined}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '12px',
+              padding: '14px 16px', borderRadius: '12px',
+              background: '#1A2E1E', border: '1px solid rgba(255,255,255,0.08)',
+              color: '#F5F0E8', textDecoration: 'none',
+            }}
+          >
+            <MessageSquareText size={18} color="#C9A227" />
+            <span style={{ flex: 1 }}>
+              <span style={{ display: 'block', fontSize: '14px', fontWeight: 600 }}>Share feedback</span>
+              <span style={{ display: 'block', fontSize: '12px', color: '#BDB5A0', marginTop: '2px' }}>Help us improve Arize</span>
+            </span>
+            <ChevronRight size={17} color="#BDB5A0" />
+          </a>
+
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '12px',
+            padding: '14px 16px', borderRadius: '12px',
+            background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
+            color: '#BDB5A0',
+          }}>
+            <ShieldCheck size={18} color="#6B9E7A" />
+            <span style={{ flex: 1 }}>
+              <span style={{ display: 'block', fontSize: '14px', color: '#F5F0E8', fontWeight: 600 }}>Privacy Policy</span>
+              <span style={{ display: 'block', fontSize: '12px', marginTop: '2px' }}>Link coming soon</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div style={{ height: '1px', background: 'rgba(255,255,255,0.07)', margin: '0 0 36px' }} />
 
       {/* Sign out */}
       <button
