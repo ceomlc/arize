@@ -274,7 +274,7 @@ export default function CoachPage() {
           Work It Out With Clarity
         </h2>
         <p style={{ fontSize: '12px', color: '#BDB5A0', marginBottom: '12px' }}>
-          AI-guided, culturally aware. Always available.
+          AI-guided. Culturally aware. Always available.
         </p>
       </div>
 

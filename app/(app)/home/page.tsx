@@ -127,7 +127,7 @@ export default async function HomePage() {
             padding: '10px 18px', borderRadius: '100px',
             textDecoration: 'none',
           }}>
-            Begin Check-in <ArrowRight size={14} />
+            Begin check-in <ArrowRight size={14} />
           </Link>
         )}
         {hasCheckedInToday && (

@@ -12,7 +12,7 @@ const SLIDES = [
   {
     emoji: '🌿',
     title: 'Built for You',
-    body: 'Arize was designed for diverse communities and women navigating spaces where they haven\'t always been seen, heard, or supported. This is a space that gets it.',
+    body: 'Arize was designed for diverse communities navigating spaces where they haven\'t always been seen, heard, or supported. This is a space that gets it.',
     accent: '#4A7C59',
   },
   {

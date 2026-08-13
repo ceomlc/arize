@@ -199,17 +199,31 @@ export default function GoalSessionPage() {
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   flexShrink: 0, marginTop: '10px', fontSize: '11px', color: '#BDB5A0',
                 }}>{i + 1}</div>
-                <input
-                  type="text"
-                  value={goal.title}
-                  onChange={e => updateGoal(i, 'title', e.target.value)}
-                  placeholder="What are you committing to?"
-                  style={{
-                    flex: 1, background: 'transparent', border: 'none',
-                    color: '#F5F0E8', fontSize: '13px', outline: 'none',
-                    fontFamily: 'var(--font-dm-sans)', lineHeight: 1.4, padding: '8px 0',
-                  }}
-                />
+                <div style={{ flex: 1 }}>
+                  <label
+                    htmlFor={`goal-title-${i}`}
+                    style={{
+                      display: 'block', fontSize: '9px', color: '#BDB5A0',
+                      letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '4px',
+                    }}
+                  >
+                    Commitment
+                  </label>
+                  <input
+                    id={`goal-title-${i}`}
+                    type="text"
+                    value={goal.title}
+                    onChange={e => updateGoal(i, 'title', e.target.value)}
+                    placeholder="What are you committing to?"
+                    style={{
+                      width: '100%', background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.14)', borderRadius: '8px',
+                      color: '#F5F0E8', fontSize: '13px', outline: 'none',
+                      fontFamily: 'var(--font-dm-sans)', lineHeight: 1.4,
+                      padding: '9px 10px', boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
                 {goals.length > 1 && (
                   <button onClick={() => removeGoal(i)}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#BDB5A0', padding: '8px 0', flexShrink: 0 }}>

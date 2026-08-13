@@ -41,7 +41,7 @@ const steps = [
     icon: <MessageCircle size={28} color="#A8C4AF" />,
     iconBg: 'rgba(74,124,89,0.15)',
     title: 'Your Clarity Coach',
-    body: 'Clarity is your AI thinking partner — available at 3am before a hard conversation, after a meeting that left you unseen, or whenever you need to process.',
+    body: 'Clarity is your AI thinking partner that’s there 24/7—available before a hard conversation, after a meeting that left you feeling unseen, or whenever you need to process.',
     sub: 'Culturally aware. Affirming. Never a therapist — always a coach.',
   },
 ]
