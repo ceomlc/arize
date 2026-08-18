@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getSafeRedirectPath } from '@/lib/auth/safe-redirect'
+import { PRIVACY_VERSION, TERMS_VERSION } from '@/lib/legal/consent'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
@@ -31,11 +32,20 @@ export async function GET(request: NextRequest) {
       // Check if user has completed onboarding
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('onboarded')
-          .eq('id', user.id)
-          .single()
+        const [{ data: profile }, { data: consent }] = await Promise.all([
+          supabase.from('profiles').select('onboarded').eq('id', user.id).maybeSingle(),
+          supabase
+            .from('legal_consents')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('terms_version', TERMS_VERSION)
+            .eq('privacy_version', PRIVACY_VERSION)
+            .maybeSingle(),
+        ])
+
+        if (!consent) {
+          return NextResponse.redirect(`${origin}/consent`)
+        }
 
         if (!profile?.onboarded) {
           return NextResponse.redirect(`${origin}/onboarding`)

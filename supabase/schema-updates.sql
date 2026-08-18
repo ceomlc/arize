@@ -246,6 +246,50 @@ grant select, insert, update, delete on coach_conversations to authenticated;
 grant select, insert on coach_messages to authenticated;
 grant all on all tables in schema public to service_role;
 
+-- Record the exact legal documents accepted by each user. Acceptance can only
+-- be written through the fixed function so clients cannot forge versions/dates.
+create table if not exists legal_consents (
+  id bigint generated always as identity primary key,
+  user_id uuid references profiles(id) on delete cascade not null,
+  terms_version text not null,
+  privacy_version text not null,
+  accepted_at timestamptz default now() not null,
+  unique (user_id, terms_version, privacy_version)
+);
+
+create index if not exists legal_consents_user_accepted_at
+  on legal_consents (user_id, accepted_at desc);
+
+alter table legal_consents enable row level security;
+drop policy if exists "legal_consents: own read" on legal_consents;
+create policy "legal_consents: own read" on legal_consents for select to authenticated
+  using ((select auth.uid()) = user_id);
+
+create or replace function public.record_legal_consent()
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  current_user_id uuid := auth.uid();
+begin
+  if current_user_id is null then
+    raise exception 'authentication required';
+  end if;
+
+  insert into public.legal_consents (user_id, terms_version, privacy_version)
+  values (current_user_id, '2.0', '2.0')
+  on conflict (user_id, terms_version, privacy_version) do nothing;
+end;
+$$;
+
+revoke all on table legal_consents from anon, authenticated;
+revoke all on function public.record_legal_consent() from public;
+grant select on legal_consents to authenticated;
+grant execute on function public.record_legal_consent() to authenticated;
+grant all on legal_consents to service_role;
+
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
   'village-audio',
