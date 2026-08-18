@@ -181,6 +181,40 @@ alter table profiles add constraint profiles_username_format
   check (username is null or username ~ '^[a-z0-9_]{3,30}$');
 
 -- ============================================================
+-- LEGAL CONSENT HISTORY
+-- ============================================================
+create table if not exists legal_consents (
+  id bigint generated always as identity primary key,
+  user_id uuid references profiles(id) on delete cascade not null,
+  terms_version text not null,
+  privacy_version text not null,
+  accepted_at timestamptz default now() not null,
+  unique (user_id, terms_version, privacy_version)
+);
+
+create index if not exists legal_consents_user_accepted_at
+  on legal_consents (user_id, accepted_at desc);
+
+create or replace function public.record_legal_consent()
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  current_user_id uuid := auth.uid();
+begin
+  if current_user_id is null then
+    raise exception 'authentication required';
+  end if;
+
+  insert into public.legal_consents (user_id, terms_version, privacy_version)
+  values (current_user_id, '2.0', '2.0')
+  on conflict (user_id, terms_version, privacy_version) do nothing;
+end;
+$$;
+
+-- ============================================================
 -- ROW LEVEL SECURITY
 -- ============================================================
 
@@ -190,6 +224,11 @@ create policy "profiles: own read" on profiles for select to authenticated using
 create policy "profiles: own update" on profiles for update to authenticated
   using ((select auth.uid()) = id)
   with check ((select auth.uid()) = id);
+
+-- Legal consent: users can view their record but only the fixed function can add it.
+alter table legal_consents enable row level security;
+create policy "legal_consents: own read" on legal_consents for select to authenticated
+  using ((select auth.uid()) = user_id);
 
 -- Check-ins: users can only read/write their own
 alter table check_ins enable row level security;
@@ -395,17 +434,21 @@ as $$
 $$;
 
 revoke all on table coach_requests from anon, authenticated;
+revoke all on table legal_consents from anon, authenticated;
+revoke all on function public.record_legal_consent() from public;
 revoke all on function public.consume_coach_quota() from public;
 revoke all on function public.join_village_room(uuid) from public;
 revoke all on function public.assign_village_moderator(uuid, uuid) from public;
 revoke all on function public.get_village_moderator_ids(uuid) from public;
 grant execute on function public.consume_coach_quota() to authenticated;
+grant execute on function public.record_legal_consent() to authenticated;
 grant execute on function public.join_village_room(uuid) to authenticated;
 grant execute on function public.assign_village_moderator(uuid, uuid) to authenticated;
 grant execute on function public.get_village_moderator_ids(uuid) to authenticated;
 
 -- Explicit Data API grants for projects that do not auto-expose new tables.
 grant select, update on profiles to authenticated;
+grant select on legal_consents to authenticated;
 grant select, insert on check_ins to authenticated;
 grant select, insert, update, delete on goals to authenticated;
 grant select on village_rooms to authenticated;

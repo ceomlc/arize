@@ -32,7 +32,7 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Protected routes — require auth
-  const protectedPaths = ['/home', '/reset', '/goals', '/village', '/coach', '/settings', '/onboarding']
+  const protectedPaths = ['/home', '/reset', '/goals', '/village', '/coach', '/settings', '/onboarding', '/consent']
   const isProtected = protectedPaths.some((p) => pathname.startsWith(p))
 
   // Auth routes — redirect to home if already logged in

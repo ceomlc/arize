@@ -18,11 +18,22 @@ export interface Database {
       friday_reflections: { Row: FridayReflection; Insert: Partial<FridayReflection>; Update: Partial<FridayReflection> }
       coach_conversations: { Row: CoachConversation; Insert: Partial<CoachConversation>; Update: Partial<CoachConversation> }
       coach_messages: { Row: SavedCoachMessage; Insert: Partial<SavedCoachMessage>; Update: Partial<SavedCoachMessage> }
+      legal_consents: { Row: LegalConsent; Insert: Partial<LegalConsent>; Update: never }
     }
     Views: Record<string, never>
-    Functions: Record<string, never>
+    Functions: {
+      record_legal_consent: { Args: Record<PropertyKey, never>; Returns: undefined }
+    }
     Enums: Record<string, never>
   }
+}
+
+export interface LegalConsent {
+  id: number
+  user_id: string
+  terms_version: string
+  privacy_version: string
+  accepted_at: string
 }
 
 export interface Profile {
