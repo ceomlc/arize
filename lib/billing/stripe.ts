@@ -15,7 +15,6 @@ function requiredEnv(name: string) {
 
 function stripeSecretKey() {
   const value = process.env.ARIZE_STRIPE_SECRET_KEY?.trim()
-    || process.env.STRIPE_SECRET_KEY?.trim()
   if (!value) throw new Error('Missing required billing configuration: ARIZE_STRIPE_SECRET_KEY')
   return value
 }
@@ -27,7 +26,7 @@ export function isStripeCheckoutEnabled() {
 export function isStripeCheckoutConfigured() {
   return Boolean(
     isStripeCheckoutEnabled()
-      && (process.env.ARIZE_STRIPE_SECRET_KEY?.trim() || process.env.STRIPE_SECRET_KEY?.trim())
+      && process.env.ARIZE_STRIPE_SECRET_KEY?.trim()
       && process.env.STRIPE_WEBHOOK_SECRET?.trim()
       && process.env.STRIPE_PRICE_MONTHLY?.trim()
       && process.env.STRIPE_PRICE_ANNUAL?.trim()

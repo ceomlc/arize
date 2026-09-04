@@ -1,5 +1,6 @@
 import type Stripe from 'stripe'
 import { NextResponse } from 'next/server'
+import { billingFailureLabel, safeBillingError } from '@/lib/billing/safe-error'
 import { assertExpectedStripeAccount, assertExpectedStripeMode, getStripe } from '@/lib/billing/stripe'
 import { syncStripeSubscription } from '@/lib/billing/subscriptions'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
     event = getStripe().webhooks.constructEvent(rawBody, signature, webhookSecret)
     assertExpectedStripeMode(event.livemode)
   } catch (error) {
-    console.error('[billing webhook: verification]', error)
+    console.error('[billing webhook: verification]', safeBillingError(error))
     return NextResponse.json({ error: 'Invalid webhook signature.' }, { status: 400 })
   }
 
@@ -48,7 +49,7 @@ export async function POST(request: Request) {
   })
 
   if (claimError) {
-    console.error('[billing webhook: claim]', claimError.message)
+    console.error('[billing webhook: claim]', safeBillingError(claimError))
     return NextResponse.json({ error: 'Unable to record webhook.' }, { status: 503 })
   }
   if (!claimed) return NextResponse.json({ received: true, duplicate: true })
@@ -92,11 +93,14 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ received: true })
   } catch (error) {
-    console.error('[billing webhook: processing]', error)
-    const message = error instanceof Error ? error.message.slice(0, 500) : 'Unknown processing error'
+    console.error('[billing webhook: processing]', safeBillingError(error))
     await supabase
       .from('billing_webhook_events')
-      .update({ status: 'failed', error: message, updated_at: new Date().toISOString() })
+      .update({
+        status: 'failed',
+        error: billingFailureLabel(error),
+        updated_at: new Date().toISOString(),
+      })
       .eq('event_id', event.id)
     return NextResponse.json({ error: 'Webhook processing failed.' }, { status: 500 })
   }

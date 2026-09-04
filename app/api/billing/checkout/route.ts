@@ -10,6 +10,7 @@ import {
   type BillingPeriod,
 } from '@/lib/billing/stripe'
 import { MEMBERSHIP_PRICING } from '@/lib/access/entitlements'
+import { safeBillingError } from '@/lib/billing/safe-error'
 import { PRIVACY_VERSION, TERMS_VERSION } from '@/lib/legal/consent'
 import { createClient } from '@/lib/supabase/server'
 
@@ -18,28 +19,6 @@ export const runtime = 'nodejs'
 function isAllowedOrigin(request: Request) {
   const origin = request.headers.get('origin')
   return !origin || origin === new URL(request.url).origin
-}
-
-function safeCheckoutError(error: unknown) {
-  if (!(error instanceof Error)) return { message: 'Unknown checkout error' }
-
-  const stripeError = error as Error & {
-    code?: string
-    param?: string
-    requestId?: string
-    statusCode?: number
-    type?: string
-  }
-
-  return {
-    name: stripeError.name,
-    message: stripeError.message,
-    type: stripeError.type,
-    code: stripeError.code,
-    param: stripeError.param,
-    requestId: stripeError.requestId,
-    statusCode: stripeError.statusCode,
-  }
 }
 
 export async function POST(request: Request) {
@@ -63,7 +42,7 @@ export async function POST(request: Request) {
     .maybeSingle()
 
   if (consentError || !consent) {
-    if (consentError) console.error('[billing checkout: consent lookup]', consentError.message)
+    if (consentError) console.error('[billing checkout: consent lookup]', safeBillingError(consentError))
     return NextResponse.json({ error: 'Please accept the current Terms and Privacy Policy first.' }, { status: 403 })
   }
 
@@ -87,7 +66,7 @@ export async function POST(request: Request) {
     .maybeSingle()
 
   if (grantError) {
-    console.error('[billing checkout: grant lookup]', grantError.message)
+    console.error('[billing checkout: grant lookup]', safeBillingError(grantError))
     return NextResponse.json({ error: 'Unable to confirm membership status.' }, { status: 503 })
   }
   if (existingGrant) {
@@ -101,7 +80,7 @@ export async function POST(request: Request) {
     .maybeSingle()
 
   if (customerError) {
-    console.error('[billing checkout: customer lookup]', customerError.message)
+    console.error('[billing checkout: customer lookup]', safeBillingError(customerError))
     return NextResponse.json({ error: 'Unable to prepare membership checkout.' }, { status: 503 })
   }
 
@@ -147,7 +126,7 @@ export async function POST(request: Request) {
     if (!session.url) throw new Error('Stripe did not return a checkout URL')
     return NextResponse.json({ url: session.url })
   } catch (error) {
-    console.error('[billing checkout]', safeCheckoutError(error))
+    console.error('[billing checkout]', safeBillingError(error))
     return NextResponse.json({ error: 'Unable to start checkout. Please try again.' }, { status: 502 })
   }
 }

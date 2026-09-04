@@ -11,11 +11,13 @@
   $1.99 monthly and $19.99 annual prices.
 - The sandbox Customer Portal permits invoice viewing, payment-method updates,
   and cancellation at the end of the billing period.
-- Vercel's existing Stripe secret belongs to a different test account. Never
-  enable checkout until it is replaced with an AmazeGen-sandbox restricted key
-  and validated against `STRIPE_EXPECTED_ACCOUNT_ID`.
-- The Supabase billing migration remains pending until the connected account
-  has access to project `alzvzrfwvxxmqdgkkkae`.
+- Vercel has the AmazeGen sandbox restricted key and validates it against
+  `STRIPE_EXPECTED_ACCOUNT_ID` before creating Checkout or Portal sessions.
+- The Supabase billing migrations are applied. Billing tables have RLS enabled;
+  webhook and coach-request tables are service-role only, while members can
+  read only their own access and billing-customer records.
+- Provider errors are reduced to allow-listed diagnostic fields before logging;
+  Stripe or user payloads are not written to application logs.
 
 ## Agreed first-version plans
 
@@ -29,15 +31,39 @@ The rest of the limits live in `lib/access/entitlements.ts`, which is the produc
 
 ## Launch order
 
-1. Apply `supabase/schema-updates.sql` and verify `access_grants` RLS plus `consume_coach_quota_for_plan`.
-2. Confirm the correct business-owned payment account.
-3. Create and verify monthly and annual prices, card-required trial checkout, customer portal, and signed webhooks.
-4. Test subscription start, trial, renewal, cancellation, failed payment, and webhook replay handling in test mode.
-5. Set the early-member launch timestamp in `supabase/early-member-trial-launch.sql` and run it once.
-6. Enable membership enforcement in a preview deployment and run Core/Plus end-to-end tests.
-7. Enable membership enforcement in production only after the preview passes.
+1. Run `npm run check` and `npm run billing:check` against the intended deployment environment.
+2. Complete monthly and annual sandbox checkout, trial, portal, cancellation,
+   failed-payment, and duplicate-webhook tests.
+3. Enable enforcement in Preview only and verify both Core and Plus limits.
+4. Have the owner select the public launch timestamp. Set that timestamp in
+   `supabase/early-member-trial-launch.sql`, review the eligible-member count,
+   and run the idempotent script once at launch.
+5. Obtain a restricted live key from the business-owned Stripe account. Create
+   and verify separate live product, prices, portal configuration, and webhook.
+6. Have the business owner and tax adviser choose the product tax category,
+   registrations, and whether Stripe Tax should collect tax. Do not enable
+   automatic tax before this decision.
+7. Obtain legal approval for the published Terms and Privacy Policy, and rotate
+   any OpenAI credential that has ever been shared outside the secret manager.
+8. Repeat the lifecycle test in live configuration without completing a real
+   charge, then enable production checkout and enforcement together.
 
 Never enable enforcement before the access-grant migration and verified webhook flow are live. If those dependencies fail after launch, turn enforcement off to restore full app access while the issue is investigated.
+
+## Verified on September 4, 2026
+
+- Supabase project is healthy on Postgres 17 and all three billing migrations are recorded.
+- The project has 24 profiles, zero access grants, zero billing customers, and
+  three successfully processed synthetic Stripe webhook events.
+- The sandbox Arize product and both recurring prices are active and have the
+  expected amounts and intervals.
+- The sandbox has no Arize subscription yet. Existing unrelated sandbox
+  subscriptions are ignored because their prices and metadata are not on the
+  Arize allow-list.
+- Monthly Checkout session creation reaches Stripe successfully with a 7-day
+  trial and card collection. Completing a test subscription is still required.
+- Stripe Tax is intentionally off and the product tax code is intentionally
+  unset until the owner/tax-adviser decision.
 
 ## Sandbox identifiers
 

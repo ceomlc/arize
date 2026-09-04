@@ -51,3 +51,48 @@ test('past-due Stripe subscriptions are revoked fail-closed', () => {
   assert.equal(record?.grant.status, 'revoked')
 })
 
+test('active subscriptions retain access through a period-end cancellation', () => {
+  const record = subscriptionAccessRecord(subscription({
+    status: 'active',
+    trial_end: null,
+    cancel_at_period_end: true,
+  }), [priceId])
+
+  assert.equal(record?.grant.source, 'subscription')
+  assert.equal(record?.grant.status, 'active')
+  assert.equal(record?.grant.ends_at, '2026-09-11T00:00:00.000Z')
+  assert.equal(record?.grant.metadata.cancel_at_period_end, true)
+})
+
+test('canceled, unpaid, and incomplete subscriptions cannot grant Plus', () => {
+  for (const status of ['canceled', 'unpaid', 'incomplete', 'incomplete_expired', 'paused'] as const) {
+    const record = subscriptionAccessRecord(subscription({ status }), [priceId])
+    assert.equal(record?.grant.status, 'revoked', status)
+  }
+})
+
+test('annual prices are recorded as annual memberships', () => {
+  const annual = subscription()
+  annual.items.data[0]!.price.recurring = {
+    interval: 'year',
+    interval_count: 1,
+    meter: null,
+    trial_period_days: null,
+    usage_type: 'licensed',
+  }
+
+  const record = subscriptionAccessRecord(annual, [priceId])
+  assert.equal(record?.grant.metadata.billing_period, 'annual')
+})
+
+test('untrusted subscription metadata cannot attach access to an invalid user', () => {
+  const record = subscriptionAccessRecord(subscription({
+    metadata: {
+      arize_app: 'arize',
+      arize_user_id: 'not-a-user-id',
+      arize_plan: 'plus',
+    },
+  }), [priceId])
+
+  assert.equal(record, null)
+})

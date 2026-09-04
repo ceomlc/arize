@@ -6,6 +6,7 @@ import {
   type AccessGrantRecord,
   type AccessSnapshot,
 } from './entitlements'
+import { safeBillingError } from '@/lib/billing/safe-error'
 
 export function isBillingEnforcementEnabled() {
   return process.env.BILLING_ENFORCEMENT_ENABLED?.trim().toLowerCase() === 'true'
@@ -29,7 +30,7 @@ export async function getUserAccess(
   if (error) {
     // Once enforcement is intentionally enabled, a missing or unavailable
     // grant store must never accidentally provide paid access.
-    console.error('[membership access]', error.message)
+    console.error('[membership access]', safeBillingError(error))
     return resolveAccess([], true)
   }
 

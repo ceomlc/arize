@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeBillingError } from '@/lib/billing/safe-error'
 import { assertExpectedStripeAccount, getPublicAppUrl, getStripe, isStripeCheckoutConfigured } from '@/lib/billing/stripe'
 import { createClient } from '@/lib/supabase/server'
 
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
     .maybeSingle()
 
   if (error) {
-    console.error('[billing portal: customer lookup]', error.message)
+    console.error('[billing portal: customer lookup]', safeBillingError(error))
     return NextResponse.json({ error: 'Unable to load your billing profile.' }, { status: 503 })
   }
   if (!customer) {
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
     })
     return NextResponse.json({ url: session.url })
   } catch (portalError) {
-    console.error('[billing portal]', portalError)
+    console.error('[billing portal]', safeBillingError(portalError))
     return NextResponse.json({ error: 'Unable to open billing management. Please try again.' }, { status: 502 })
   }
 }
