@@ -39,6 +39,8 @@ begin
 end;
 $$;
 
+revoke all on function public.handle_new_user() from public, anon, authenticated;
+
 create or replace trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
@@ -435,7 +437,7 @@ $$;
 
 revoke all on table coach_requests from anon, authenticated;
 revoke all on table legal_consents from anon, authenticated;
-revoke all on function public.record_legal_consent() from public;
+revoke all on function public.record_legal_consent() from public, anon, authenticated;
 revoke all on function public.consume_coach_quota() from public;
 revoke all on function public.join_village_room(uuid) from public;
 revoke all on function public.assign_village_moderator(uuid, uuid) from public;
@@ -539,10 +541,6 @@ as $$
 declare
   was_claimed boolean := false;
 begin
-  if auth.role() <> 'service_role' then
-    raise exception 'service role required';
-  end if;
-
   insert into public.billing_webhook_events (event_id, event_type, livemode)
   values (p_event_id, p_event_type, p_livemode)
   on conflict (event_id) do update set
@@ -561,7 +559,7 @@ begin
 end;
 $$;
 
-revoke all on function public.claim_billing_webhook_event(text, text, boolean) from public;
+revoke all on function public.claim_billing_webhook_event(text, text, boolean) from public, anon, authenticated;
 grant execute on function public.claim_billing_webhook_event(text, text, boolean) to service_role;
 
 -- The API supplies the server-resolved tier limits. Values are clamped to the
@@ -618,5 +616,5 @@ begin
 end;
 $$;
 
-revoke all on function public.consume_coach_quota_for_plan(integer, integer) from public;
+revoke all on function public.consume_coach_quota_for_plan(integer, integer) from public, anon, authenticated;
 grant execute on function public.consume_coach_quota_for_plan(integer, integer) to authenticated;

@@ -285,7 +285,7 @@ end;
 $$;
 
 revoke all on table legal_consents from anon, authenticated;
-revoke all on function public.record_legal_consent() from public;
+revoke all on function public.record_legal_consent() from public, anon, authenticated;
 grant select on legal_consents to authenticated;
 grant execute on function public.record_legal_consent() to authenticated;
 grant all on legal_consents to service_role;
@@ -397,10 +397,6 @@ as $$
 declare
   was_claimed boolean := false;
 begin
-  if auth.role() <> 'service_role' then
-    raise exception 'service role required';
-  end if;
-
   insert into public.billing_webhook_events (event_id, event_type, livemode)
   values (p_event_id, p_event_type, p_livemode)
   on conflict (event_id) do update set
@@ -419,7 +415,7 @@ begin
 end;
 $$;
 
-revoke all on function public.claim_billing_webhook_event(text, text, boolean) from public;
+revoke all on function public.claim_billing_webhook_event(text, text, boolean) from public, anon, authenticated;
 grant execute on function public.claim_billing_webhook_event(text, text, boolean) to service_role;
 
 create or replace function public.consume_coach_quota_for_plan(
@@ -474,5 +470,5 @@ begin
 end;
 $$;
 
-revoke all on function public.consume_coach_quota_for_plan(integer, integer) from public;
+revoke all on function public.consume_coach_quota_for_plan(integer, integer) from public, anon, authenticated;
 grant execute on function public.consume_coach_quota_for_plan(integer, integer) to authenticated;

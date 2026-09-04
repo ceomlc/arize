@@ -13,6 +13,13 @@ function requiredEnv(name: string) {
   return value
 }
 
+function stripeSecretKey() {
+  const value = process.env.ARIZE_STRIPE_SECRET_KEY?.trim()
+    || process.env.STRIPE_SECRET_KEY?.trim()
+  if (!value) throw new Error('Missing required billing configuration: ARIZE_STRIPE_SECRET_KEY')
+  return value
+}
+
 export function isStripeCheckoutEnabled() {
   return process.env.STRIPE_CHECKOUT_ENABLED?.trim().toLowerCase() === 'true'
 }
@@ -20,7 +27,7 @@ export function isStripeCheckoutEnabled() {
 export function isStripeCheckoutConfigured() {
   return Boolean(
     isStripeCheckoutEnabled()
-      && process.env.STRIPE_SECRET_KEY?.trim()
+      && (process.env.ARIZE_STRIPE_SECRET_KEY?.trim() || process.env.STRIPE_SECRET_KEY?.trim())
       && process.env.STRIPE_WEBHOOK_SECRET?.trim()
       && process.env.STRIPE_PRICE_MONTHLY?.trim()
       && process.env.STRIPE_PRICE_ANNUAL?.trim()
@@ -32,7 +39,7 @@ export function isStripeCheckoutConfigured() {
 }
 
 export function getStripe() {
-  const secretKey = requiredEnv('STRIPE_SECRET_KEY')
+  const secretKey = stripeSecretKey()
   const expectedMode = requiredEnv('STRIPE_EXPECTED_MODE')
   const keyIsLive = secretKey.startsWith('sk_live_') || secretKey.startsWith('rk_live_')
   const keyIsTest = secretKey.startsWith('sk_test_') || secretKey.startsWith('rk_test_')
