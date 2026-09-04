@@ -1,6 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import type { VillageRoom } from '@/lib/types'
+import { getUserAccess } from '@/lib/access/server'
+import { canAccessVillageRoom } from '@/lib/access/entitlements'
+import { LockKeyhole } from 'lucide-react'
+import { redirect } from 'next/navigation'
 
 const ROOM_ICONS: Record<string, string> = {
   'First Gen in Finance': '💼',
@@ -11,6 +15,9 @@ const ROOM_ICONS: Record<string, string> = {
 
 export default async function VillagePage() {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/sign-in')
+  const access = await getUserAccess(supabase, user.id)
 
   const { data: rooms } = await supabase
     .from('village_rooms')
@@ -53,7 +60,9 @@ export default async function VillagePage() {
       </div>
 
       <div style={{ padding: '0 24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {rooms_.map(room => (
+        {rooms_.map(room => {
+          const canEnter = canAccessVillageRoom(access, room.name)
+          return (
           <div key={room.id} style={{
             background: room.is_featured
               ? 'linear-gradient(135deg, rgba(36,61,40,1) 0%, rgba(14,28,18,1) 100%)'
@@ -79,7 +88,11 @@ export default async function VillagePage() {
                   </p>
                 </div>
               </div>
-              {room.is_featured && (
+              {!canEnter ? (
+                <span style={{ background: 'rgba(201,162,39,0.12)', border: '1px solid rgba(201,162,39,0.3)', color: '#F2D98A', fontSize: '9px', fontWeight: 600, letterSpacing: '0.08em', padding: '4px 8px', borderRadius: '100px', textTransform: 'uppercase', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <LockKeyhole size={10} /> Plus
+                </span>
+              ) : room.is_featured && (
                 <span style={{
                   background: 'rgba(196,97,74,0.2)', border: '1px solid #C4614A',
                   color: '#C4614A', fontSize: '9px', fontWeight: 600, letterSpacing: '0.1em',
@@ -88,13 +101,14 @@ export default async function VillagePage() {
               )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-              <p style={{ fontSize: '11px', color: '#BDB5A0' }}>Text · Voice · Community</p>
-              <Link href={`/village/${room.id}`} style={{ fontSize: '12px', color: '#A8C4AF', fontWeight: 500, textDecoration: 'none' }}>
-                Enter →
+              <p style={{ fontSize: '11px', color: '#BDB5A0' }}>{access.limits.villageMedia ? 'Text · Voice · Video' : 'Text community'}</p>
+              <Link href={canEnter ? `/village/${room.id}` : '/upgrade'} style={{ fontSize: '12px', color: canEnter ? '#A8C4AF' : '#F2D98A', fontWeight: 500, textDecoration: 'none' }}>
+                {canEnter ? 'Enter →' : 'Unlock →'}
               </Link>
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

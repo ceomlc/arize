@@ -3,10 +3,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Send, Mic, MicOff, Video, VideoOff, Crown } from 'lucide-react'
+import { ArrowLeft, Send, Mic, MicOff, Video, VideoOff, Crown, LockKeyhole } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { VillageRoom, VillageMessage } from '@/lib/types'
 import type { RealtimePostgresInsertPayload } from '@supabase/supabase-js'
+import { useAccess } from '@/components/access/AccessProvider'
+import { canAccessVillageRoom } from '@/lib/access/entitlements'
 
 const AVATAR_COLORS = ['#4A7C59', '#C9A227', '#7BADC4', '#C4614A', '#A8C4AF', '#E8B84B']
 
@@ -25,6 +27,7 @@ export default function RoomPage() {
   const router = useRouter()
   const roomId = params.roomId as string
   const supabase = createClient()
+  const access = useAccess()
 
   const [room, setRoom] = useState<VillageRoom | null>(null)
   const [messages, setMessages] = useState<VillageMessage[]>([])
@@ -58,6 +61,11 @@ export default function RoomPage() {
 
       const { data: roomData } = await supabase.from('village_rooms').select('*').eq('id', roomId).single()
       setRoom(roomData)
+
+      if (roomData && !canAccessVillageRoom(access, roomData.name)) {
+        setLoading(false)
+        return
+      }
 
       const { data: membership } = await supabase
         .from('village_memberships').select('user_id, is_moderator')
@@ -133,6 +141,7 @@ export default function RoomPage() {
   }
 
   async function startRecording() {
+    if (!access.limits.villageMedia) return
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       audioChunksRef.current = []
@@ -169,6 +178,7 @@ export default function RoomPage() {
   }
 
   async function startVideoRecording() {
+    if (!access.limits.villageMedia) return
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       if (videoPreviewRef.current) {
@@ -241,6 +251,24 @@ export default function RoomPage() {
     return (
       <div style={{ background: '#0E1C12', minHeight: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <p style={{ color: '#BDB5A0', fontSize: '13px' }}>Loading room…</p>
+      </div>
+    )
+  }
+
+  if (room && !canAccessVillageRoom(access, room.name)) {
+    return (
+      <div style={{ background: '#0E1C12', minHeight: '100%', padding: '18px 24px' }}>
+        <Link href="/village" style={{ color: '#BDB5A0', display: 'inline-flex', alignItems: 'center', gap: '7px', textDecoration: 'none', fontSize: '13px' }}>
+          <ArrowLeft size={18} /> Back to Village
+        </Link>
+        <div style={{ maxWidth: '340px', margin: '72px auto 0', textAlign: 'center', padding: '28px 22px', borderRadius: '20px', background: '#1A2E1E', border: '1px solid rgba(201,162,39,0.24)' }}>
+          <div style={{ width: '52px', height: '52px', display: 'grid', placeItems: 'center', margin: '0 auto 16px', borderRadius: '16px', background: 'rgba(201,162,39,0.12)', color: '#F2D98A' }}>
+            <LockKeyhole size={24} />
+          </div>
+          <h1 style={{ fontFamily: 'var(--font-playfair)', fontSize: '23px', color: '#F5F0E8', fontWeight: 500, marginBottom: '10px' }}>{room.name} is a Plus room</h1>
+          <p style={{ color: '#BDB5A0', fontSize: '13px', lineHeight: 1.55, marginBottom: '20px' }}>Core members can join Wins Only with text chat. Plus opens every room along with voice and video messages.</p>
+          <Link href="/upgrade" style={{ display: 'block', padding: '13px', borderRadius: '12px', background: '#C9A227', color: '#0E1C12', fontWeight: 700, textDecoration: 'none' }}>See Arize Plus</Link>
+        </div>
       </div>
     )
   }
@@ -375,14 +403,18 @@ export default function RoomPage() {
               </div>
             ) : (
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <button onClick={startRecording}
+                {access.limits.villageMedia ? <><button onClick={startRecording}
                   style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#BDB5A0', flexShrink: 0 }}>
                   <Mic size={15} />
                 </button>
                 <button onClick={startVideoRecording}
                   style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#BDB5A0', flexShrink: 0 }}>
                   <Video size={15} />
-                </button>
+                </button></> : (
+                  <Link href="/upgrade" aria-label="Unlock voice and video with Plus" title="Voice and video are available with Plus" style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(201,162,39,0.08)', border: '1px solid rgba(201,162,39,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F2D98A', flexShrink: 0 }}>
+                    <LockKeyhole size={15} />
+                  </Link>
+                )}
                 <textarea
                   value={text}
                   onChange={e => setText(e.target.value)}

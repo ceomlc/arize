@@ -6,6 +6,7 @@ import {
   MAX_COACH_BODY_BYTES,
   validateCoachRequest,
 } from '@/lib/coach/request'
+import { getUserAccess } from '@/lib/access/server'
 
 const SYSTEM_PROMPT = `You are Clarity, an AI wellness coach for Arize by AmazeGen. You support Black corporate professionals in managing workplace stress, navigating difficult situations, and staying emotionally healthy.
 
@@ -33,18 +34,23 @@ IMPORTANT LIMITS:
 
 const fallbackQuotaRequests = new Map<string, number[]>()
 
-function consumeFallbackQuota(userId: string) {
+function consumeFallbackQuota(userId: string, dailyLimit: number, monthlyLimit: number) {
   const now = Date.now()
   const oneMinuteAgo = now - 60_000
   const oneDayAgo = now - 86_400_000
+  const currentDate = new Date(now)
+  const monthStart = Date.UTC(currentDate.getUTCFullYear(), currentDate.getUTCMonth(), 1)
   const recentRequests = (fallbackQuotaRequests.get(userId) ?? [])
-    .filter(timestamp => timestamp >= oneDayAgo)
+    .filter(timestamp => timestamp >= monthStart)
 
   if (recentRequests.filter(timestamp => timestamp >= oneMinuteAgo).length >= 10) {
     return { allowed: false, retry_after_seconds: 60 }
   }
-  if (recentRequests.length >= 100) {
+  if (recentRequests.filter(timestamp => timestamp >= oneDayAgo).length >= dailyLimit) {
     return { allowed: false, retry_after_seconds: 3600 }
+  }
+  if (recentRequests.length >= monthlyLimit) {
+    return { allowed: false, retry_after_seconds: 86_400 }
   }
 
   recentRequests.push(now)
@@ -52,10 +58,10 @@ function consumeFallbackQuota(userId: string) {
   return { allowed: true, retry_after_seconds: 0 }
 }
 
-function isMissingQuotaFunction(error: { code?: string; message?: string }) {
+function isMissingQuotaFunction(error: { code?: string; message?: string }, functionName: string) {
   return error.code === 'PGRST202'
     || error.code === '42883'
-    || error.message?.includes('consume_coach_quota')
+    || error.message?.includes(functionName)
 }
 
 export async function POST(request: NextRequest) {
@@ -79,6 +85,8 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
     }
+
+    const access = await getUserAccess(supabase, user.id)
 
     // Get user context (recent mood + goals)
     const { data: profile } = await supabase.from('profiles').select('name').eq('id', user.id).single()
@@ -118,22 +126,42 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: validated.error }, { status: 400 })
     }
 
-    const { data: databaseQuota, error: quotaError } = await supabase.rpc('consume_coach_quota')
+    const { data: databaseQuota, error: quotaError } = await supabase.rpc('consume_coach_quota_for_plan', {
+      p_daily_limit: access.limits.coachMessagesPerDay,
+      p_monthly_limit: access.limits.coachMessagesPerMonth,
+    })
     let quota = databaseQuota
     if (quotaError) {
-      if (!isMissingQuotaFunction(quotaError)) {
+      if (!isMissingQuotaFunction(quotaError, 'consume_coach_quota_for_plan')) {
         console.error('[coach quota]', quotaError.message)
         return Response.json({ error: 'Coach is temporarily unavailable' }, { status: 503 })
       }
 
-      // Preserve rate limiting on the current server instance until the
-      // production Supabase migration installs consume_coach_quota().
-      console.warn('[coach quota] database function unavailable; using instance fallback')
-      quota = consumeFallbackQuota(user.id)
+      if (access.billingEnabled) {
+        console.error('[coach quota] tier-aware quota function is required when billing is enabled')
+        return Response.json({ error: 'Coach membership limits are temporarily unavailable' }, { status: 503 })
+      }
+
+      // Until the new migration is installed, retain the existing durable
+      // launch quota rather than silently relying on a single server instance.
+      const { data: legacyQuota, error: legacyQuotaError } = await supabase.rpc('consume_coach_quota')
+      if (!legacyQuotaError) {
+        quota = legacyQuota
+      } else if (isMissingQuotaFunction(legacyQuotaError, 'consume_coach_quota')) {
+        console.warn('[coach quota] database functions unavailable; using instance fallback')
+        quota = consumeFallbackQuota(
+          user.id,
+          access.limits.coachMessagesPerDay,
+          access.limits.coachMessagesPerMonth,
+        )
+      } else {
+        console.error('[coach quota]', legacyQuotaError.message)
+        return Response.json({ error: 'Coach is temporarily unavailable' }, { status: 503 })
+      }
     }
     if (!quota?.allowed) {
       return Response.json(
-        { error: 'Coach request limit reached. Please try again later.' },
+        { error: 'You have reached your Clarity message limit for this period.' },
         {
           status: 429,
           headers: { 'Retry-After': String(quota?.retry_after_seconds ?? 60) },

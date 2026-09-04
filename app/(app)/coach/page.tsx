@@ -2,9 +2,12 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import { Send, History, Plus, X, MessageCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { CoachConversation, CoachMessage, SavedCoachMessage } from '@/lib/types'
+import { useAccess } from '@/components/access/AccessProvider'
+import { hasCoreRestrictions } from '@/lib/access/entitlements'
 
 const INITIAL_MESSAGE: CoachMessage = {
   role: 'assistant',
@@ -21,6 +24,8 @@ const SUGGESTED_PROMPTS = [
 export default function CoachPage() {
   const searchParams = useSearchParams()
   const supabase = createClient()
+  const access = useAccess()
+  const isCore = hasCoreRestrictions(access)
 
   const [messages, setMessages] = useState<CoachMessage[]>([INITIAL_MESSAGE])
   const [input, setInput] = useState(() =>
@@ -45,12 +50,15 @@ export default function CoachPage() {
       if (!user) return
       setUserId(user.id)
 
-      const { data: conversationData } = await supabase
+      let conversationQuery = supabase
         .from('coach_conversations')
         .select('*')
         .eq('user_id', user.id)
         .order('updated_at', { ascending: false })
-        .limit(30)
+      if (access.limits.coachConversationHistory !== null) {
+        conversationQuery = conversationQuery.limit(access.limits.coachConversationHistory)
+      }
+      const { data: conversationData } = await conversationQuery
       setConversations((conversationData ?? []) as CoachConversation[])
       setHistoryLoading(false)
 
@@ -159,7 +167,8 @@ export default function CoachPage() {
       })
 
       if (!response.ok) {
-        throw new Error('Failed to get response')
+        const responseError = await response.json().catch(() => null) as { error?: string } | null
+        throw new Error(responseError?.error || 'Failed to get response')
       }
 
       const reader = response.body?.getReader()
@@ -208,8 +217,11 @@ export default function CoachPage() {
             .sort((a, b) => b.updated_at.localeCompare(a.updated_at)))
         }
       }
-    } catch {
-      setError('Clarity is unavailable right now. Please check your connection and try again.')
+    } catch (caughtError) {
+      const message = caughtError instanceof Error ? caughtError.message : ''
+      setError(message.includes('limit')
+        ? `${message} You can continue when your allowance resets, or view Plus for higher limits.`
+        : 'Clarity is unavailable right now. Please check your connection and try again.')
       setMessages(prev => prev.slice(0, -1)) // Remove empty assistant message
     } finally {
       setStreaming(false)
@@ -300,6 +312,11 @@ export default function CoachPage() {
                   </span>
                 </button>
               ))}
+              {isCore && (
+                <Link href="/upgrade" style={{ color: '#F2D98A', fontSize: '11px', textAlign: 'center', padding: '8px', textDecoration: 'none' }}>
+                  Core shows your {access.limits.coachConversationHistory} most recent conversations · See Plus
+                </Link>
+              )}
             </div>
           )}
         </aside>

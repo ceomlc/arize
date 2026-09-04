@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, LockKeyhole } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { CheckIn } from '@/lib/types'
+import { useAccess } from '@/components/access/AccessProvider'
+import { hasCoreRestrictions } from '@/lib/access/entitlements'
 
 const MOOD_COLORS: Record<string, string> = {
   tense: '#C4614A',
@@ -18,6 +20,7 @@ const TIME_FILTERS = [
   { label: '7d', days: 7 },
   { label: '30d', days: 30 },
   { label: '90d', days: 90 },
+  { label: 'All', days: null },
 ]
 
 function buildSvgPath(points: { x: number; y: number }[]) {
@@ -33,7 +36,9 @@ function buildSvgPath(points: { x: number; y: number }[]) {
 
 export default function PatternMapPage() {
   const supabase = createClient()
-  const [activeFilter, setActiveFilter] = useState(1) // 30d
+  const access = useAccess()
+  const isCore = hasCoreRestrictions(access)
+  const [activeFilter, setActiveFilter] = useState(() => isCore ? 0 : 1)
   const [checkIns, setCheckIns] = useState<CheckIn[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -47,15 +52,17 @@ export default function PatternMapPage() {
       }
 
       const days = TIME_FILTERS[activeFilter].days
-      const since = new Date()
-      since.setDate(since.getDate() - days)
+      const since = days === null ? null : new Date()
+      if (since && days !== null) since.setDate(since.getDate() - days)
 
-      const { data } = await supabase
+      let query = supabase
         .from('check_ins')
         .select('*')
         .eq('user_id', user.id)
-        .gte('created_at', since.toISOString())
         .order('created_at', { ascending: true })
+      if (since) query = query.gte('created_at', since.toISOString())
+
+      const { data } = await query
 
       setCheckIns(data ?? [])
       setLoading(false)
@@ -123,22 +130,34 @@ export default function PatternMapPage() {
 
       {/* Time filter */}
       <div style={{ display: 'flex', gap: '6px', margin: '16px 24px 0' }}>
-        {TIME_FILTERS.map((f, i) => (
+        {TIME_FILTERS.map((f, i) => {
+          const locked = isCore && (f.days === null || f.days > (access.limits.patternHistoryDays ?? 7))
+          return (
           <button
             key={f.label}
-            onClick={() => setActiveFilter(i)}
+            onClick={() => { if (!locked) setActiveFilter(i) }}
+            disabled={locked}
+            title={locked ? 'Available with Arize Plus' : undefined}
             style={{
               fontSize: '11px', padding: '6px 14px', borderRadius: '100px',
               background: activeFilter === i ? 'rgba(74,124,89,0.3)' : '#1A2E1E',
               border: `1px solid ${activeFilter === i ? '#4A7C59' : 'rgba(255,255,255,0.06)'}`,
               color: activeFilter === i ? '#A8C4AF' : '#BDB5A0',
-              cursor: 'pointer', fontFamily: 'var(--font-dm-sans)',
+              cursor: locked ? 'not-allowed' : 'pointer', fontFamily: 'var(--font-dm-sans)',
+              opacity: locked ? 0.58 : 1, display: 'inline-flex', alignItems: 'center', gap: '5px',
             }}
           >
-            {f.label}
+            {locked && <LockKeyhole size={11} />} {f.label}
           </button>
-        ))}
+          )
+        })}
       </div>
+
+      {isCore && (
+        <p style={{ margin: '10px 24px 0', fontSize: '11px', color: '#BDB5A0' }}>
+          Core shows 7 days. <Link href="/upgrade" style={{ color: '#F2D98A', fontWeight: 600 }}>Unlock longer views with Plus.</Link>
+        </p>
+      )}
 
       {/* Chart */}
       <div style={{

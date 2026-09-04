@@ -2,9 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Plus, TrendingUp, ChevronLeft, ChevronRight, Check } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { Goal } from '@/lib/types'
+import { useAccess } from '@/components/access/AccessProvider'
+import { hasCoreRestrictions } from '@/lib/access/entitlements'
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -23,7 +26,10 @@ function dateKey(date: Date) {
 }
 
 export default function GoalsPage() {
+  const router = useRouter()
   const supabase = createClient()
+  const access = useAccess()
+  const isCore = hasCoreRestrictions(access)
   const [goals, setGoals] = useState<Goal[]>([])
   const [loading, setLoading] = useState(true)
   const [today] = useState(new Date())
@@ -77,6 +83,10 @@ export default function GoalsPage() {
   })
 
   function moveWeek(direction: -1 | 1) {
+    if (direction === -1 && isCore && isCurrentWeek) {
+      router.push('/upgrade')
+      return
+    }
     const nextWeek = new Date(weekStart)
     nextWeek.setDate(nextWeek.getDate() + direction * 7)
     if (nextWeek > currentWeekStart) return
@@ -177,7 +187,7 @@ export default function GoalsPage() {
         }}>
           <TrendingUp size={16} color="#7BADC4" />
           <span style={{ flex: 1, fontSize: '13px', color: '#F5F0E8' }}>View your Pattern Map</span>
-          <span style={{ fontSize: '11px', color: '#7BADC4' }}>30-day view →</span>
+          <span style={{ fontSize: '11px', color: '#7BADC4' }}>{isCore ? '7-day view' : 'All-time views'} →</span>
         </Link>
       </div>
 

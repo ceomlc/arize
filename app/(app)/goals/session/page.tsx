@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { Plus, Trash2, ArrowLeft, MessageCircle, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { GoalCategory } from '@/lib/types'
+import { useAccess } from '@/components/access/AccessProvider'
+import { hasCoreRestrictions } from '@/lib/access/entitlements'
 
 const CATEGORIES: GoalCategory[] = ['Career', 'Wellness', 'Reflection', 'Personal']
 
@@ -15,6 +17,7 @@ interface DraftGoal {
   category: GoalCategory
   deadline: string
   notes: string
+  isComplete: boolean
 }
 
 type StoredGoal = {
@@ -23,6 +26,7 @@ type StoredGoal = {
   category: string | null
   deadline: string | null
   notes: string | null
+  is_complete: boolean
 }
 
 function getWeekStart() {
@@ -35,7 +39,9 @@ function getWeekStart() {
 export default function GoalSessionPage() {
   const router = useRouter()
   const supabase = createClient()
-  const [goals, setGoals] = useState<DraftGoal[]>([{ title: '', category: 'Personal', deadline: '', notes: '' }])
+  const access = useAccess()
+  const isCore = hasCoreRestrictions(access)
+  const [goals, setGoals] = useState<DraftGoal[]>([{ title: '', category: 'Personal', deadline: '', notes: '', isComplete: false }])
   const [originalGoalIds, setOriginalGoalIds] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -65,6 +71,7 @@ export default function GoalSessionPage() {
             : g.category as GoalCategory,
           deadline: g.deadline ?? '',
           notes: g.notes ?? '',
+          isComplete: g.is_complete,
         })))
       }
     }
@@ -72,7 +79,13 @@ export default function GoalSessionPage() {
   }, [])
 
   function addGoal() {
-    setGoals(prev => [...prev, { title: '', category: 'Personal', deadline: '', notes: '' }])
+    const activeGoalCount = goals.filter(goal => !goal.isComplete).length
+    if (isCore && activeGoalCount >= (access.limits.activeGoals ?? 3)) {
+      setError(`Core includes up to ${access.limits.activeGoals} active goals. Upgrade to Plus to add more.`)
+      return
+    }
+    setError('')
+    setGoals(prev => [...prev, { title: '', category: 'Personal', deadline: '', notes: '', isComplete: false }])
   }
 
   function removeGoal(i: number) {
@@ -87,6 +100,11 @@ export default function GoalSessionPage() {
   async function handleSave() {
     const validGoals = goals.filter(g => g.title.trim() || g.notes.trim())
     if (validGoals.length === 0) { setError('Add at least one goal to save.'); return }
+    const activeGoalCount = validGoals.filter(goal => !goal.isComplete).length
+    if (isCore && activeGoalCount > (access.limits.activeGoals ?? 3)) {
+      setError(`Core includes up to ${access.limits.activeGoals} active goals. Complete or remove a goal, or upgrade to Plus.`)
+      return
+    }
     setError('')
     setSaving(true)
 
@@ -298,7 +316,7 @@ export default function GoalSessionPage() {
           ))}
         </div>
 
-        {goals.length < 7 && (
+        {goals.length < 7 && (!isCore || goals.filter(goal => !goal.isComplete).length < (access.limits.activeGoals ?? 3)) && (
           <button onClick={addGoal}
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
@@ -309,6 +327,11 @@ export default function GoalSessionPage() {
             }}>
             <Plus size={14} /> Add another commitment
           </button>
+        )}
+        {isCore && goals.filter(goal => !goal.isComplete).length >= (access.limits.activeGoals ?? 3) && (
+          <div style={{ marginTop: '10px', padding: '12px 14px', borderRadius: '10px', background: 'rgba(201,162,39,0.08)', border: '1px solid rgba(201,162,39,0.18)', color: '#BDB5A0', fontSize: '12px', lineHeight: 1.5 }}>
+            Core supports {access.limits.activeGoals} active goals. <Link href="/upgrade" style={{ color: '#F2D98A', fontWeight: 600 }}>See Plus</Link> for unlimited goals.
+          </div>
         )}
       </div>
 

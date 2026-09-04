@@ -13,15 +13,19 @@ import {
   MessageSquareText,
   ShieldCheck,
   ChevronRight,
+  Sparkles,
+  FileText,
 } from 'lucide-react'
 import { getUsernameError, normalizeUsername } from '@/lib/profile/username'
 import { createClient } from '@/lib/supabase/client'
+import { useAccess } from '@/components/access/AccessProvider'
 
 const feedbackUrl = process.env.NEXT_PUBLIC_FEEDBACK_URL?.trim() || '/feedback'
 
 export default function SettingsPage() {
   const router = useRouter()
   const supabase = createClient()
+  const access = useAccess()
 
   const [name, setName] = useState('')
   const [username, setUsername] = useState('')
@@ -210,6 +214,28 @@ export default function SettingsPage() {
       {/* Divider */}
       <div style={{ height: '1px', background: 'rgba(255,255,255,0.07)', margin: '36px 0' }} />
 
+      {/* Membership */}
+      <div style={{ marginBottom: '36px' }}>
+        <p style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#C9A227', marginBottom: '10px' }}>
+          Membership
+        </p>
+        <Link href="/upgrade" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', borderRadius: '12px', background: 'linear-gradient(135deg, rgba(201,162,39,0.12), rgba(74,124,89,0.12))', border: '1px solid rgba(201,162,39,0.24)', color: '#F5F0E8', textDecoration: 'none' }}>
+          <Sparkles size={18} color="#C9A227" />
+          <span style={{ flex: 1 }}>
+            <span style={{ display: 'block', fontSize: '14px', fontWeight: 600 }}>
+              {access.billingEnabled ? `Arize ${access.plan === 'plus' ? 'Plus' : 'Core'}` : 'Full launch access'}
+            </span>
+            <span style={{ display: 'block', fontSize: '12px', color: '#BDB5A0', marginTop: '2px' }}>
+              {access.billingEnabled ? 'View your plan and membership options' : 'Preview the upcoming Core and Plus plans'}
+            </span>
+          </span>
+          <ChevronRight size={17} color="#BDB5A0" />
+        </Link>
+      </div>
+
+      {/* Divider */}
+      <div style={{ height: '1px', background: 'rgba(255,255,255,0.07)', margin: '0 0 36px' }} />
+
       {/* Support and privacy */}
       <div style={{ marginBottom: '36px' }}>
         <p style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#C9A227', marginBottom: '10px' }}>
@@ -235,18 +261,28 @@ export default function SettingsPage() {
             <ChevronRight size={17} color="#BDB5A0" />
           </a>
 
-          <div style={{
+          <a href="https://amazegen.com/privacy.html" target="_blank" rel="noreferrer" style={{
             display: 'flex', alignItems: 'center', gap: '12px',
             padding: '14px 16px', borderRadius: '12px',
             background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
-            color: '#BDB5A0',
+            color: '#BDB5A0', textDecoration: 'none',
           }}>
             <ShieldCheck size={18} color="#6B9E7A" />
             <span style={{ flex: 1 }}>
               <span style={{ display: 'block', fontSize: '14px', color: '#F5F0E8', fontWeight: 600 }}>Privacy Policy</span>
-              <span style={{ display: 'block', fontSize: '12px', marginTop: '2px' }}>Link coming soon</span>
+              <span style={{ display: 'block', fontSize: '12px', marginTop: '2px' }}>Read how your information is handled</span>
             </span>
-          </div>
+            <ChevronRight size={17} color="#BDB5A0" />
+          </a>
+
+          <a href="https://amazegen.com/terms.html" target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', borderRadius: '12px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', color: '#BDB5A0', textDecoration: 'none' }}>
+            <FileText size={18} color="#6B9E7A" />
+            <span style={{ flex: 1 }}>
+              <span style={{ display: 'block', fontSize: '14px', color: '#F5F0E8', fontWeight: 600 }}>Terms of Use</span>
+              <span style={{ display: 'block', fontSize: '12px', marginTop: '2px' }}>Review the terms for using Arize</span>
+            </span>
+            <ChevronRight size={17} color="#BDB5A0" />
+          </a>
         </div>
       </div>
 

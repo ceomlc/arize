@@ -6,6 +6,9 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { AppHeader } from '@/components/nav/AppHeader'
 import { PRIVACY_VERSION, TERMS_VERSION } from '@/lib/legal/consent'
+import { getUserAccess } from '@/lib/access/server'
+import { AccessProvider } from '@/components/access/AccessProvider'
+import { EarlyMemberTrialModal } from '@/components/access/EarlyMemberTrialModal'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -23,16 +26,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   if (!consent) redirect('/consent')
 
+  const access = await getUserAccess(supabase, user.id)
+
   return (
     <div style={{ background: '#0A1409', minHeight: '100dvh' }}>
       <div className="app-container">
-        <AppHeader />
-        {/* Page content */}
-        <main style={{ paddingBottom: '88px', minHeight: 'calc(100dvh - 58px)' }}>
-          {children}
-        </main>
-        <BottomNav />
-        <WelcomeModal />
+        <AccessProvider access={access}>
+          <AppHeader />
+          {/* Page content */}
+          <main style={{ paddingBottom: '88px', minHeight: 'calc(100dvh - 58px)' }}>
+            {children}
+          </main>
+          <BottomNav />
+          <WelcomeModal />
+          <EarlyMemberTrialModal />
+        </AccessProvider>
       </div>
     </div>
   )

@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { History } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { MoodType, TimeOfDay } from '@/lib/types'
 
@@ -141,9 +143,14 @@ export default function DailyResetPage() {
 
       {/* Header */}
       <div style={{ padding: '16px 24px 0' }}>
-        <p style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#C9A227', marginBottom: '10px' }}>
-          {config.label}
-        </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
+          <p style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#C9A227' }}>
+            {config.label}
+          </p>
+          <Link href="/reset/history" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#A8C4AF', fontSize: '11px', textDecoration: 'none' }}>
+            <History size={14} /> History
+          </Link>
+        </div>
         <h2 style={{ fontFamily: 'var(--font-playfair)', fontSize: '22px', color: '#F5F0E8', fontWeight: 400, fontStyle: 'italic', lineHeight: 1.3, marginBottom: '6px' }}>
           {config.heading}
         </h2>

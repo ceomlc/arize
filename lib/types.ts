@@ -19,10 +19,15 @@ export interface Database {
       coach_conversations: { Row: CoachConversation; Insert: Partial<CoachConversation>; Update: Partial<CoachConversation> }
       coach_messages: { Row: SavedCoachMessage; Insert: Partial<SavedCoachMessage>; Update: Partial<SavedCoachMessage> }
       legal_consents: { Row: LegalConsent; Insert: Partial<LegalConsent>; Update: never }
+      access_grants: { Row: AccessGrant; Insert: Partial<AccessGrant>; Update: Partial<AccessGrant> }
     }
     Views: Record<string, never>
     Functions: {
       record_legal_consent: { Args: Record<PropertyKey, never>; Returns: undefined }
+      consume_coach_quota_for_plan: {
+        Args: { p_daily_limit: number; p_monthly_limit: number }
+        Returns: { allowed: boolean; retry_after_seconds: number; limit?: string }
+      }
     }
     Enums: Record<string, never>
   }
@@ -34,6 +39,20 @@ export interface LegalConsent {
   terms_version: string
   privacy_version: string
   accepted_at: string
+}
+
+export interface AccessGrant {
+  id: string
+  user_id: string
+  plan: 'core' | 'plus'
+  source: 'early_member_trial' | 'checkout_trial' | 'subscription' | 'admin'
+  status: 'scheduled' | 'active' | 'expired' | 'revoked'
+  starts_at: string
+  ends_at: string | null
+  external_reference: string | null
+  metadata: Json
+  created_at: string
+  updated_at: string
 }
 
 export interface Profile {
