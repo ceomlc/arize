@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { ArrowLeft, Check, LockKeyhole, Sparkles } from 'lucide-react'
+import { ArrowLeft, Check, Sparkles } from 'lucide-react'
 import { useAccess } from '@/components/access/AccessProvider'
+import { BillingActions } from '@/components/billing/BillingActions'
 import { MEMBERSHIP_PRICING } from '@/lib/access/entitlements'
 
 const CORE_FEATURES = [
@@ -89,14 +90,18 @@ export default function UpgradePage() {
             {MEMBERSHIP_PRICING.newMemberTrialDays}-day free trial · card required · cancel anytime
           </p>
           <FeatureList features={PLUS_FEATURES} />
-          <button disabled style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', border: 0, borderRadius: '12px', padding: '13px', marginTop: '20px', background: 'rgba(201,162,39,0.28)', color: '#D8C57D', fontFamily: 'var(--font-dm-sans)', fontWeight: 700, cursor: 'not-allowed' }}>
-            <LockKeyhole size={15} /> Checkout setup pending
-          </button>
+          <BillingActions />
         </section>
       </div>
 
       <p style={{ maxWidth: '560px', margin: '18px auto 0', color: '#8F897A', fontSize: '11px', lineHeight: 1.5, textAlign: 'center' }}>
         Clarity usage is capped on both plans so Arize can keep the service reliable. Membership renews unless canceled after a paid subscription begins.
+      </p>
+      <p style={{ maxWidth: '560px', margin: '8px auto 0', color: '#8F897A', fontSize: '11px', lineHeight: 1.5, textAlign: 'center' }}>
+        By starting a trial, you agree to the{' '}
+        <a href="https://amazegen.com/terms.html" target="_blank" rel="noreferrer" style={{ color: '#BDB5A0' }}>Terms of Use</a>
+        {' '}and{' '}
+        <a href="https://amazegen.com/privacy.html" target="_blank" rel="noreferrer" style={{ color: '#BDB5A0' }}>Privacy Policy</a>.
       </p>
     </div>
   )

@@ -64,6 +64,18 @@ body {
   letter-spacing: 0.05em;
 }
 
+@keyframes billing-spin {
+  to { transform: rotate(360deg); }
+}
+
+.billing-spinner {
+  animation: billing-spin 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .billing-spinner { animation: none; }
+}
+
 /* The first version used 9–13px text throughout. Raise those small inline
    sizes consistently while retaining the existing component hierarchy. */
 .app-container [style*="font-size: 9px"] { font-size: 12px !important; }

@@ -4,9 +4,18 @@
 
 - `BILLING_ENFORCEMENT_ENABLED` defaults to `false`.
 - While it is false, every signed-in member receives Plus-level app access.
-- The membership page is a preview and checkout is disabled.
+- The membership page includes sandbox-ready Checkout controls, but both the
+  public and server checkout flags remain disabled.
 - No early-member trial is created merely by deploying the application or the database schema.
-- No payment-provider products, prices, keys, checkout sessions, portal sessions, or webhooks are configured yet.
+- The AmazeGen Stripe sandbox contains a dedicated `Arize Plus` product with
+  $1.99 monthly and $19.99 annual prices.
+- The sandbox Customer Portal permits invoice viewing, payment-method updates,
+  and cancellation at the end of the billing period.
+- Vercel's existing Stripe secret belongs to a different test account. Never
+  enable checkout until it is replaced with an AmazeGen-sandbox restricted key
+  and validated against `STRIPE_EXPECTED_ACCOUNT_ID`.
+- The Supabase billing migration remains pending until the connected account
+  has access to project `alzvzrfwvxxmqdgkkkae`.
 
 ## Agreed first-version plans
 
@@ -29,3 +38,14 @@ The rest of the limits live in `lib/access/entitlements.ts`, which is the produc
 7. Enable membership enforcement in production only after the preview passes.
 
 Never enable enforcement before the access-grant migration and verified webhook flow are live. If those dependencies fail after launch, turn enforcement off to restore full app access while the issue is investigated.
+
+## Sandbox identifiers
+
+- Stripe account: `acct_1U7yiODPFt9aTNyk`
+- Product: `prod_VCRuYB14HNWGMO`
+- Monthly price: `price_1UC30aDPFt9aTNykeEuhwFfb`
+- Annual price: `price_1UC30dDPFt9aTNykxDAL6VXh`
+- Customer Portal configuration: `bpc_1UC3CnDPFt9aTNyk10wZB19w`
+
+These are test-mode identifiers. Live-mode resources must be created and
+verified separately before a public paid launch.

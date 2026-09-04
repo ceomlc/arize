@@ -20,6 +20,8 @@ export interface Database {
       coach_messages: { Row: SavedCoachMessage; Insert: Partial<SavedCoachMessage>; Update: Partial<SavedCoachMessage> }
       legal_consents: { Row: LegalConsent; Insert: Partial<LegalConsent>; Update: never }
       access_grants: { Row: AccessGrant; Insert: Partial<AccessGrant>; Update: Partial<AccessGrant> }
+      billing_customers: { Row: BillingCustomer; Insert: Partial<BillingCustomer>; Update: Partial<BillingCustomer> }
+      billing_webhook_events: { Row: BillingWebhookEvent; Insert: Partial<BillingWebhookEvent>; Update: Partial<BillingWebhookEvent> }
     }
     Views: Record<string, never>
     Functions: {
@@ -27,6 +29,10 @@ export interface Database {
       consume_coach_quota_for_plan: {
         Args: { p_daily_limit: number; p_monthly_limit: number }
         Returns: { allowed: boolean; retry_after_seconds: number; limit?: string }
+      }
+      claim_billing_webhook_event: {
+        Args: { p_event_id: string; p_event_type: string; p_livemode: boolean }
+        Returns: boolean
       }
     }
     Enums: Record<string, never>
@@ -53,6 +59,25 @@ export interface AccessGrant {
   metadata: Json
   created_at: string
   updated_at: string
+}
+
+export interface BillingCustomer {
+  user_id: string
+  stripe_customer_id: string
+  created_at: string
+  updated_at: string
+}
+
+export interface BillingWebhookEvent {
+  event_id: string
+  event_type: string
+  livemode: boolean
+  status: 'processing' | 'processed' | 'failed'
+  attempt_count: number
+  error: string | null
+  created_at: string
+  updated_at: string
+  processed_at: string | null
 }
 
 export interface Profile {

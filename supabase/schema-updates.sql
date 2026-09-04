@@ -339,9 +339,9 @@ create table if not exists access_grants (
 
 create index if not exists access_grants_user_status_dates
   on access_grants (user_id, status, starts_at desc, ends_at);
+drop index if exists access_grants_external_reference_unique;
 create unique index if not exists access_grants_external_reference_unique
-  on access_grants (source, external_reference)
-  where external_reference is not null;
+  on access_grants (external_reference);
 
 alter table access_grants enable row level security;
 drop policy if exists "access grants: own read" on access_grants;
@@ -351,6 +351,76 @@ create policy "access grants: own read" on access_grants for select to authentic
 revoke all on table access_grants from anon, authenticated;
 grant select on access_grants to authenticated;
 grant all on access_grants to service_role;
+
+create table if not exists billing_customers (
+  user_id uuid primary key references profiles(id) on delete cascade,
+  stripe_customer_id text unique not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table billing_customers enable row level security;
+drop policy if exists "billing customers: own read" on billing_customers;
+create policy "billing customers: own read" on billing_customers for select to authenticated
+  using ((select auth.uid()) = user_id);
+
+revoke all on table billing_customers from anon, authenticated;
+grant select on billing_customers to authenticated;
+grant all on billing_customers to service_role;
+
+create table if not exists billing_webhook_events (
+  event_id text primary key,
+  event_type text not null,
+  livemode boolean not null,
+  status text not null default 'processing' check (status in ('processing', 'processed', 'failed')),
+  attempt_count integer not null default 1 check (attempt_count > 0),
+  error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  processed_at timestamptz
+);
+
+alter table billing_webhook_events enable row level security;
+revoke all on table billing_webhook_events from anon, authenticated;
+grant all on billing_webhook_events to service_role;
+
+create or replace function public.claim_billing_webhook_event(
+  p_event_id text,
+  p_event_type text,
+  p_livemode boolean
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  was_claimed boolean := false;
+begin
+  if auth.role() <> 'service_role' then
+    raise exception 'service role required';
+  end if;
+
+  insert into public.billing_webhook_events (event_id, event_type, livemode)
+  values (p_event_id, p_event_type, p_livemode)
+  on conflict (event_id) do update set
+    status = 'processing',
+    attempt_count = public.billing_webhook_events.attempt_count + 1,
+    error = null,
+    updated_at = now()
+  where public.billing_webhook_events.status = 'failed'
+     or (
+       public.billing_webhook_events.status = 'processing'
+       and public.billing_webhook_events.updated_at < now() - interval '10 minutes'
+     )
+  returning true into was_claimed;
+
+  return coalesce(was_claimed, false);
+end;
+$$;
+
+revoke all on function public.claim_billing_webhook_event(text, text, boolean) from public;
+grant execute on function public.claim_billing_webhook_event(text, text, boolean) to service_role;
 
 create or replace function public.consume_coach_quota_for_plan(
   p_daily_limit integer,
