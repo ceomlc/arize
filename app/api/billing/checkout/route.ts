@@ -20,6 +20,28 @@ function isAllowedOrigin(request: Request) {
   return !origin || origin === new URL(request.url).origin
 }
 
+function safeCheckoutError(error: unknown) {
+  if (!(error instanceof Error)) return { message: 'Unknown checkout error' }
+
+  const stripeError = error as Error & {
+    code?: string
+    param?: string
+    requestId?: string
+    statusCode?: number
+    type?: string
+  }
+
+  return {
+    name: stripeError.name,
+    message: stripeError.message,
+    type: stripeError.type,
+    code: stripeError.code,
+    param: stripeError.param,
+    requestId: stripeError.requestId,
+    statusCode: stripeError.statusCode,
+  }
+}
+
 export async function POST(request: Request) {
   if (!isAllowedOrigin(request)) {
     return NextResponse.json({ error: 'Invalid request origin.' }, { status: 403 })
@@ -94,6 +116,7 @@ export async function POST(request: Request) {
       mode: 'subscription',
       origin_context: 'web',
       integration_identifier: STRIPE_CHECKOUT_INTEGRATION_ID,
+      managed_payments: { enabled: false },
       client_reference_id: user.id,
       ...(customer?.stripe_customer_id
         ? { customer: customer.stripe_customer_id }
@@ -124,7 +147,7 @@ export async function POST(request: Request) {
     if (!session.url) throw new Error('Stripe did not return a checkout URL')
     return NextResponse.json({ url: session.url })
   } catch (error) {
-    console.error('[billing checkout]', error)
+    console.error('[billing checkout]', safeCheckoutError(error))
     return NextResponse.json({ error: 'Unable to start checkout. Please try again.' }, { status: 502 })
   }
 }
