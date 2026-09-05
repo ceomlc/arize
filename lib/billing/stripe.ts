@@ -27,12 +27,10 @@ export function isStripeCheckoutConfigured() {
   return Boolean(
     isStripeCheckoutEnabled()
       && process.env.ARIZE_STRIPE_SECRET_KEY?.trim()
-      && process.env.STRIPE_WEBHOOK_SECRET?.trim()
       && process.env.STRIPE_PRICE_MONTHLY?.trim()
       && process.env.STRIPE_PRICE_ANNUAL?.trim()
       && process.env.STRIPE_EXPECTED_ACCOUNT_ID?.trim()
       && process.env.STRIPE_EXPECTED_MODE?.trim()
-      && process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
       && process.env.NEXT_PUBLIC_APP_URL?.trim(),
   )
 }
